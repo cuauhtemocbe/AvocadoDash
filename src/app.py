@@ -26,6 +26,12 @@ data = load_data()
 regions = sorted(data["region"].unique())
 avocado_types = sorted(data["type"].unique())
 
+# Define numeric columns for scatter plot
+numeric_columns = [
+    "AveragePrice", "Total Volume", 
+    "Total Bags", "Small Bags", "Large Bags", "XLarge Bags", "year"
+]
+
 external_stylesheets = [
     {
         "href": (
@@ -130,6 +136,64 @@ app.layout = html.Div(
             ],
             className="wrapper",
         ),
+        html.Div(
+            children=[
+                html.H2(
+                    children="Scatter Plot Analysis",
+                    style={
+                        "text-align": "center",
+                        "margin": "40px 0 20px 0",
+                        "color": "#079A82",
+                        "font-size": "28px"
+                    }
+                ),
+                html.Div(
+                    children=[
+                        html.Div(
+                            children=[
+                                html.Div(children="X-Axis Column", className="menu-title"),
+                                dcc.Dropdown(
+                                    id="x-axis-dropdown",
+                                    options=[
+                                        {"label": col.replace("_", " ").title(), "value": col}
+                                        for col in numeric_columns
+                                    ],
+                                    value="AveragePrice",
+                                    clearable=False,
+                                    className="dropdown",
+                                ),
+                            ],
+                            style={"width": "45%", "display": "inline-block"}
+                        ),
+                        html.Div(
+                            children=[
+                                html.Div(children="Y-Axis Column", className="menu-title"),
+                                dcc.Dropdown(
+                                    id="y-axis-dropdown",
+                                    options=[
+                                        {"label": col.replace("_", " ").title(), "value": col}
+                                        for col in numeric_columns
+                                    ],
+                                    value="Total Volume",
+                                    clearable=False,
+                                    className="dropdown",
+                                ),
+                            ],
+                            style={"width": "45%", "display": "inline-block", "margin-left": "10%"}
+                        ),
+                    ],
+                    style={"margin": "20px auto", "max-width": "800px"}
+                ),
+                html.Div(
+                    children=dcc.Graph(
+                        id="scatter-chart",
+                        config={"displayModeBar": True},
+                    ),
+                    className="card",
+                    style={"margin": "20px auto", "max-width": "1000px"}
+                ),
+            ]
+        ),
     ]
 )
 
@@ -214,6 +278,68 @@ def create_volume_chart(filtered_data):
         },
     }
 
+def create_scatter_chart(filtered_data, x_col, y_col):
+    """Create a scatter plot with selected columns."""
+    # Create color mapping for avocado types
+    color_map = {"conventional": "#17B897", "organic": "#E12D39"}
+    
+    traces = []
+    for avocado_type in filtered_data["type"].unique():
+        type_data = filtered_data[filtered_data["type"] == avocado_type]
+        traces.append({
+            "x": type_data[x_col],
+            "y": type_data[y_col],
+            "mode": "markers",
+            "type": "scatter",
+            "name": avocado_type.title(),
+            "marker": {
+                "size": 8,
+                "color": color_map.get(avocado_type, "#17B897"),
+                "opacity": 0.7,
+                "line": {"width": 1, "color": "white"}
+            },
+            "hovertemplate": (
+                f"<b>%{{fullData.name}}</b><br>"
+                f"{x_col.replace('_', ' ').title()}: %{{x}}<br>"
+                f"{y_col.replace('_', ' ').title()}: %{{y}}<br>"
+                f"Region: %{{customdata[0]}}<br>"
+                f"Date: %{{customdata[1]}}<extra></extra>"
+            ),
+            "customdata": list(zip(type_data["region"], type_data["Date"].dt.strftime("%Y-%m-%d")))
+        })
+    
+    return {
+        "data": traces,
+        "layout": {
+            "title": {
+                "text": f"{x_col.replace('_', ' ').title()} vs {y_col.replace('_', ' ').title()}",
+                "x": 0.5,
+                "xanchor": "center",
+                "font": {"size": 22},
+            },
+            "xaxis": {
+                "title": x_col.replace("_", " ").title(),
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "yaxis": {
+                "title": y_col.replace("_", " ").title(),
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "plot_bgcolor": "white",
+            "paper_bgcolor": "white",
+            "hovermode": "closest",
+            "legend": {
+                "x": 1.02,
+                "y": 1,
+                "bgcolor": "rgba(255,255,255,0.8)",
+                "bordercolor": "gray",
+                "borderwidth": 1
+            }
+        },
+    }
+
 @app.callback(
     Output("price-chart", "figure"),
     Output("volume-chart", "figure"),
@@ -260,6 +386,51 @@ def update_charts(region, avocado_type, start_date, end_date):
             "layout": {"title": f"Error: {str(e)}"}
         }
         return error_fig, error_fig
+
+@app.callback(
+    Output("scatter-chart", "figure"),
+    Input("region-filter", "value"),
+    Input("type-filter", "value"),
+    Input("date-range", "start_date"),
+    Input("date-range", "end_date"),
+    Input("x-axis-dropdown", "value"),
+    Input("y-axis-dropdown", "value"),
+)
+def update_scatter_chart(region, avocado_type, start_date, end_date, x_col, y_col):
+    """Update scatter chart based on filter selections and axis choices."""
+    try:
+        # Filter data based on selections
+        filtered_data = data.query(
+            "region == @region and type == @avocado_type"
+            " and Date >= @start_date and Date <= @end_date"
+        )
+        
+        # Handle empty data case
+        if filtered_data.empty:
+            return {
+                "data": [],
+                "layout": {
+                    "title": "No data available for selected filters",
+                    "annotations": [{
+                        "text": "Try adjusting your filters",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x": 0.5,
+                        "y": 0.5,
+                        "showarrow": False,
+                        "font": {"size": 16}
+                    }]
+                }
+            }
+        
+        return create_scatter_chart(filtered_data, x_col, y_col)
+    
+    except Exception as e:
+        print(f"Error in scatter chart callback: {str(e)}")
+        return {
+            "data": [],
+            "layout": {"title": f"Error: {str(e)}"}
+        }
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=8050)
