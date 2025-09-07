@@ -1,0 +1,10 @@
+FROM python:3.12.6-slim
+RUN mkdir app
+WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y git && \
+    apt-get clean
+RUN pip install "poetry"
+RUN poetry config virtualenvs.create false
+COPY . .
+RUN poetry install --no-root

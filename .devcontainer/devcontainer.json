@@ -1,0 +1,20 @@
+{
+	"name": "Python",
+	"dockerComposeFile": ["../docker-compose.yml"],
+	"service": "app",
+	"workspaceFolder": "/app",
+	"mounts": [
+		"source=${localWorkspaceFolder},target=/app,type=bind"
+	],
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.debugpy",
+				"ms-toolsai.jupyter",
+				"tamasfe.even-better-toml"
+			]
+		}
+	}
+}
