@@ -1,15 +1,30 @@
 # app.py
 
+import os
 import pandas as pd
 from dash import Dash, Input, Output, dcc, html
+import plotly.express as px
 
-data = (
-    pd.read_csv("src/avocado.csv")
-    .assign(Date=lambda data: pd.to_datetime(data["Date"], format="%Y-%m-%d"))
-    .sort_values(by="Date")
-)
-regions = data["region"].sort_values().unique()
-avocado_types = data["type"].sort_values().unique()
+def load_data():
+    """Load and preprocess the avocado dataset."""
+    try:
+        # Use relative path from the script location
+        csv_path = os.path.join(os.path.dirname(__file__), "avocado.csv")
+        data = (
+            pd.read_csv(csv_path)
+            .assign(Date=lambda df: pd.to_datetime(df["Date"], format="%Y-%m-%d"))
+            .sort_values(by="Date")
+        )
+        return data
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Could not find avocado.csv at {csv_path}")
+    except Exception as e:
+        raise Exception(f"Error loading data: {str(e)}")
+
+# Load data
+data = load_data()
+regions = sorted(data["region"].unique())
+avocado_types = sorted(data["type"].unique())
 
 external_stylesheets = [
     {
@@ -21,7 +36,7 @@ external_stylesheets = [
     },
 ]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
-app.title = "Avocado Analytics: Understand Your Avocados!"
+app.title = "Avocado Analytics"
 
 app.layout = html.Div(
     children=[
@@ -54,6 +69,8 @@ app.layout = html.Div(
                             ],
                             value="Albany",
                             clearable=False,
+                            searchable=True,
+                            placeholder="Select a region...",
                             className="dropdown",
                         ),
                     ]
@@ -116,6 +133,87 @@ app.layout = html.Div(
     ]
 )
 
+def create_price_chart(filtered_data):
+    """Create the price chart with improved styling."""
+    return {
+        "data": [
+            {
+                "x": filtered_data["Date"],
+                "y": filtered_data["AveragePrice"],
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": "Average Price",
+                "hovertemplate": "Date: %{x}<br>Price: $%{y:.2f}<extra></extra>",
+                "line": {"width": 3},
+                "marker": {"size": 4},
+            },
+        ],
+        "layout": {
+            "title": {
+                "text": "Average Price of Avocados",
+                "x": 0.05,
+                "xanchor": "left",
+                "font": {"size": 20},
+            },
+            "xaxis": {
+                "fixedrange": True,
+                "title": "Date",
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "yaxis": {
+                "tickprefix": "$", 
+                "fixedrange": True,
+                "title": "Price (USD)",
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "colorway": ["#17B897"],
+            "plot_bgcolor": "white",
+            "paper_bgcolor": "white",
+        },
+    }
+
+def create_volume_chart(filtered_data):
+    """Create the volume chart with improved styling."""
+    return {
+        "data": [
+            {
+                "x": filtered_data["Date"],
+                "y": filtered_data["Total Volume"],
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": "Volume Sold",
+                "hovertemplate": "Date: %{x}<br>Volume: %{y:,.0f}<extra></extra>",
+                "line": {"width": 3},
+                "marker": {"size": 4},
+            },
+        ],
+        "layout": {
+            "title": {
+                "text": "Avocados Sold (Volume)",
+                "x": 0.05,
+                "xanchor": "left",
+                "font": {"size": 20},
+            },
+            "xaxis": {
+                "fixedrange": True,
+                "title": "Date",
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "yaxis": {
+                "fixedrange": True,
+                "title": "Volume",
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "colorway": ["#E12D39"],
+            "plot_bgcolor": "white",
+            "paper_bgcolor": "white",
+        },
+    }
+
 @app.callback(
     Output("price-chart", "figure"),
     Output("volume-chart", "figure"),
@@ -125,47 +223,43 @@ app.layout = html.Div(
     Input("date-range", "end_date"),
 )
 def update_charts(region, avocado_type, start_date, end_date):
-    filtered_data = data.query(
-        "region == @region and type == @avocado_type"
-        " and Date >= @start_date and Date <= @end_date"
-    )
-    price_chart_figure = {
-        "data": [
-            {
-                "x": filtered_data["Date"],
-                "y": filtered_data["AveragePrice"],
-                "type": "lines",
-                "hovertemplate": "$%{y:.2f}<extra></extra>",
-            },
-        ],
-        "layout": {
-            "title": {
-                "text": "Average Price of Avocados",
-                "x": 0.05,
-                "xanchor": "left",
-            },
-            "xaxis": {"fixedrange": True},
-            "yaxis": {"tickprefix": "$", "fixedrange": True},
-            "colorway": ["#17B897"],
-        },
-    }
-
-    volume_chart_figure = {
-        "data": [
-            {
-                "x": filtered_data["Date"],
-                "y": filtered_data["Total Volume"],
-                "type": "lines",
-            },
-        ],
-        "layout": {
-            "title": {"text": "Avocados Sold", "x": 0.05, "xanchor": "left"},
-            "xaxis": {"fixedrange": True},
-            "yaxis": {"fixedrange": True},
-            "colorway": ["#E12D39"],
-        },
-    }
-    return price_chart_figure, volume_chart_figure
+    """Update charts based on filter selections."""
+    try:
+        # Filter data based on selections
+        filtered_data = data.query(
+            "region == @region and type == @avocado_type"
+            " and Date >= @start_date and Date <= @end_date"
+        )
+        
+        # Handle empty data case
+        if filtered_data.empty:
+            empty_fig = {
+                "data": [],
+                "layout": {
+                    "title": "No data available for selected filters",
+                    "annotations": [{
+                        "text": "Try adjusting your filters",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x": 0.5,
+                        "y": 0.5,
+                        "showarrow": False,
+                        "font": {"size": 16}
+                    }]
+                }
+            }
+            return empty_fig, empty_fig
+        
+        return create_price_chart(filtered_data), create_volume_chart(filtered_data)
+    
+    except Exception as e:
+        print(f"Error in callback: {str(e)}")
+        # Return empty figures on error
+        error_fig = {
+            "data": [],
+            "layout": {"title": f"Error: {str(e)}"}
+        }
+        return error_fig, error_fig
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=8050)
