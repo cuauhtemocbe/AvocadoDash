@@ -13,14 +13,11 @@ RUN apt-get update && \
 RUN pip install "poetry"
 RUN poetry config virtualenvs.create false
 
-# Copy dependency files
-COPY pyproject.toml poetry.lock ./
+# Copy application code
+COPY . .
 
 # Install Python dependencies
 RUN poetry install --no-root --no-dev
-
-# Copy application code
-COPY . .
 
 # Expose port (Railway will override this)
 EXPOSE 8050
