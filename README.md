@@ -17,7 +17,7 @@ Construido con **Python Dash**, incluye múltiples tipos de visualizaciones para
 
 ## 📖 Versión en inglés
 
-Para leer la documentación en inglés, visita: [README en inglés](README.md)
+Para leer la documentación en inglés, visita: [README en inglés](./docs/README_EN.md)
 
 ---
 
