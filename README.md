@@ -45,7 +45,7 @@ Para leer la documentación en inglés, visita: [README en inglés](README.md)
 ---
 
 ## 📁 Estructura del Proyecto
-
+```
 AvocadoDash/
 ├── src/
 │   ├── app.py              # Aplicación principal de Dash
@@ -60,7 +60,7 @@ AvocadoDash/
 ├── poetry.lock             # Versiones bloqueadas de dependencias
 ├── railway.json            # Configuración de Railway
 └── README.md
-
+```
 ---
 
 ## 🔧 Instalación y Configuración
