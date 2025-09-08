@@ -50,7 +50,26 @@ app.layout = html.Div(
             children=[
                 html.P(children="🥑", className="header-emoji"),
                 html.H1(
-                    children="Avocado Analytics by Kuautli", className="header-title"
+                    children="Avocado Analytics", className="header-title"
+                ),
+                html.P(
+                    children=[
+                        "by ",
+                        html.A(
+                            "@Kuautli",
+                            href="https://github.com/cuauhtemocbe",
+                            target="_blank",
+                            className="header-link"
+                        ),
+                        " | ",
+                        html.A(
+                            "View on GitHub",
+                            href="https://github.com/cuauhtemocbe/AvocadoDash",
+                            target="_blank",
+                            className="header-link"
+                        )
+                    ],
+                    className="header-subtitle"
                 ),
                 html.P(
                     children=(
@@ -252,6 +271,30 @@ app.layout = html.Div(
                     style={"margin": "20px auto", "max-width": "1000px"}
                 ),
             ]
+        ),
+        html.Div(
+            children=[
+                html.P(
+                    children=[
+                        "Created by ",
+                        html.A(
+                            "@Kuautli",
+                            href="https://github.com/cuauhtemocbe",
+                            target="_blank",
+                            className="footer-link"
+                        ),
+                        " | ",
+                        html.A(
+                            "View on GitHub",
+                            href="https://github.com/cuauhtemocbe/AvocadoDash",
+                            target="_blank",
+                            className="footer-link"
+                        )
+                    ],
+                    className="footer-text"
+                )
+            ],
+            className="footer"
         ),
     ]
 )

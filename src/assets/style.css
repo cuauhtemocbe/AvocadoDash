@@ -24,6 +24,25 @@ body {
     margin: 0 auto;
 }
 
+.header-subtitle {
+    color: #17B897;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    margin: 10px auto 20px auto;
+}
+
+.header-link {
+    color: #17B897;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.header-link:hover {
+    color: #079A82;
+    text-decoration: underline;
+}
+
 .header-description {
     color: #CFCFCF;
     margin: 4px auto;
@@ -74,4 +93,28 @@ body {
     margin-bottom: 6px;
     font-weight: bold;
     color: #079A82;
+}
+
+.footer {
+    background-color: #222222;
+    padding: 20px 0;
+    margin-top: 40px;
+    text-align: center;
+}
+
+.footer-text {
+    color: #CFCFCF;
+    margin: 0;
+    font-size: 14px;
+}
+
+.footer-link {
+    color: #17B897;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.footer-link:hover {
+    color: #079A82;
+    text-decoration: underline;
 }
