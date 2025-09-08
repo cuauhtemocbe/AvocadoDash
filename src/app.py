@@ -3,7 +3,6 @@
 import os
 import pandas as pd
 from dash import Dash, Input, Output, dcc, html
-import plotly.express as px
 
 def load_data():
     """Load and preprocess the avocado dataset."""
@@ -43,6 +42,7 @@ external_stylesheets = [
 ]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = "Avocado Analytics"
+server = app.server  # This is needed for Railway deployment
 
 app.layout = html.Div(
     children=[
@@ -661,4 +661,6 @@ def update_box_plot(region, avocado_type, start_date, end_date, column, group_by
         }
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=8050)
+    # Get port from environment variable for Railway deployment
+    port = int(os.environ.get("PORT", 8050))
+    app.run(debug=False, host='0.0.0.0', port=port)
