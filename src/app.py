@@ -194,6 +194,65 @@ app.layout = html.Div(
                 ),
             ]
         ),
+        html.Div(
+            children=[
+                html.H2(
+                    children="Box Plot Analysis",
+                    style={
+                        "text-align": "center",
+                        "margin": "40px 0 20px 0",
+                        "color": "#079A82",
+                        "font-size": "28px"
+                    }
+                ),
+                html.Div(
+                    children=[
+                        html.Div(
+                            children=[
+                                html.Div(children="Column to Analyze", className="menu-title"),
+                                dcc.Dropdown(
+                                    id="box-plot-column",
+                                    options=[
+                                        {"label": col.replace("_", " ").title(), "value": col}
+                                        for col in numeric_columns
+                                    ],
+                                    value="AveragePrice",
+                                    clearable=False,
+                                    className="dropdown",
+                                ),
+                            ],
+                            style={"width": "45%", "display": "inline-block"}
+                        ),
+                        html.Div(
+                            children=[
+                                html.Div(children="Group By", className="menu-title"),
+                                dcc.Dropdown(
+                                    id="box-plot-groupby",
+                                    options=[
+                                        {"label": "Avocado Type", "value": "type"},
+                                        {"label": "Region", "value": "region"},
+                                        {"label": "Year", "value": "year"},
+                                    ],
+                                    value="type",
+                                    clearable=False,
+                                    className="dropdown",
+                                ),
+                            ],
+                            style={"width": "45%", "display": "inline-block", "margin-left": "10%"}
+                        ),
+                    ],
+                    style={"margin": "20px auto", "max-width": "800px"}
+                ),
+                html.Div(
+                    children=dcc.Graph(
+                        id="box-plot-chart",
+                        config={"displayModeBar": True},
+                    ),
+                    className="card",
+                    style={"margin": "20px auto", "max-width": "1000px"}
+                ),
+            ]
+        ),
     ]
 )
 
@@ -275,6 +334,109 @@ def create_volume_chart(filtered_data):
             "colorway": ["#E12D39"],
             "plot_bgcolor": "white",
             "paper_bgcolor": "white",
+        },
+    }
+
+def create_box_plot(filtered_data, column, group_by):
+    """Create a box plot for the selected column grouped by the specified variable."""
+    # Color mapping for different groups
+    color_map = {
+        "conventional": "#17B897", 
+        "organic": "#E12D39"
+    }
+    
+    traces = []
+    
+    if group_by == "type":
+        # Group by avocado type
+        for avocado_type in sorted(filtered_data["type"].unique()):
+            type_data = filtered_data[filtered_data["type"] == avocado_type]
+            traces.append({
+                "y": type_data[column],
+                "type": "box",
+                "name": avocado_type.title(),
+                "marker": {"color": color_map.get(avocado_type, "#17B897")},
+                "boxpoints": "outliers",
+                "jitter": 0.3,
+                "pointpos": -1.8,
+            })
+    
+    elif group_by == "region":
+        # For regions, use a single box plot with color by type if multiple types exist
+        if len(filtered_data["type"].unique()) > 1:
+            for avocado_type in sorted(filtered_data["type"].unique()):
+                type_data = filtered_data[filtered_data["type"] == avocado_type]
+                traces.append({
+                    "y": type_data[column],
+                    "x": type_data["region"],
+                    "type": "box",
+                    "name": avocado_type.title(),
+                    "marker": {"color": color_map.get(avocado_type, "#17B897")},
+                    "boxpoints": "outliers",
+                })
+        else:
+            # Single type, group by region
+            for region in sorted(filtered_data["region"].unique()):
+                region_data = filtered_data[filtered_data["region"] == region]
+                traces.append({
+                    "y": region_data[column],
+                    "type": "box",
+                    "name": region,
+                    "boxpoints": "outliers",
+                    "jitter": 0.3,
+                    "pointpos": -1.8,
+                })
+    
+    elif group_by == "year":
+        # Group by year
+        for year in sorted(filtered_data["year"].unique()):
+            year_data = filtered_data[filtered_data["year"] == year]
+            traces.append({
+                "y": year_data[column],
+                "type": "box",
+                "name": str(year),
+                "boxpoints": "outliers",
+                "jitter": 0.3,
+                "pointpos": -1.8,
+            })
+    
+    # Determine layout based on group_by
+    if group_by == "region" and len(filtered_data["type"].unique()) > 1:
+        x_title = "Region"
+        show_legend = True
+    else:
+        x_title = group_by.replace("_", " ").title()
+        show_legend = len(traces) > 1
+    
+    return {
+        "data": traces,
+        "layout": {
+            "title": {
+                "text": f"{column.replace('_', ' ').title()} Distribution by {group_by.replace('_', ' ').title()}",
+                "x": 0.5,
+                "xanchor": "center",
+                "font": {"size": 22},
+            },
+            "xaxis": {
+                "title": x_title,
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "yaxis": {
+                "title": column.replace("_", " ").title(),
+                "showgrid": True,
+                "gridcolor": "lightgray",
+            },
+            "plot_bgcolor": "white",
+            "paper_bgcolor": "white",
+            "showlegend": show_legend,
+            "legend": {
+                "x": 1.02,
+                "y": 1,
+                "bgcolor": "rgba(255,255,255,0.8)",
+                "bordercolor": "gray",
+                "borderwidth": 1
+            }
         },
     }
 
@@ -427,6 +589,72 @@ def update_scatter_chart(region, avocado_type, start_date, end_date, x_col, y_co
     
     except Exception as e:
         print(f"Error in scatter chart callback: {str(e)}")
+        return {
+            "data": [],
+            "layout": {"title": f"Error: {str(e)}"}
+        }
+
+@app.callback(
+    Output("box-plot-chart", "figure"),
+    Input("region-filter", "value"),
+    Input("type-filter", "value"),
+    Input("date-range", "start_date"),
+    Input("date-range", "end_date"),
+    Input("box-plot-column", "value"),
+    Input("box-plot-groupby", "value"),
+)
+def update_box_plot(region, avocado_type, start_date, end_date, column, group_by):
+    """Update box plot based on filter selections and grouping choice."""
+    try:
+        # For box plots, we might want to show data across different groups
+        # So we'll modify the filtering based on the group_by selection
+        if group_by == "type":
+            # Show both types, but filter by region and date
+            filtered_data = data.query(
+                "region == @region"
+                " and Date >= @start_date and Date <= @end_date"
+            )
+        elif group_by == "region":
+            # Show data for selected type across regions (or all types if comparing)
+            filtered_data = data.query(
+                "type == @avocado_type"
+                " and Date >= @start_date and Date <= @end_date"
+            )
+        elif group_by == "year":
+            # Show data for selected region and type across years
+            filtered_data = data.query(
+                "region == @region and type == @avocado_type"
+                " and Date >= @start_date and Date <= @end_date"
+            )
+        else:
+            # Default filtering
+            filtered_data = data.query(
+                "region == @region and type == @avocado_type"
+                " and Date >= @start_date and Date <= @end_date"
+            )
+        
+        # Handle empty data case
+        if filtered_data.empty:
+            return {
+                "data": [],
+                "layout": {
+                    "title": "No data available for selected filters",
+                    "annotations": [{
+                        "text": "Try adjusting your filters",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x": 0.5,
+                        "y": 0.5,
+                        "showarrow": False,
+                        "font": {"size": 16}
+                    }]
+                }
+            }
+        
+        return create_box_plot(filtered_data, column, group_by)
+    
+    except Exception as e:
+        print(f"Error in box plot callback: {str(e)}")
         return {
             "data": [],
             "layout": {"title": f"Error: {str(e)}"}
