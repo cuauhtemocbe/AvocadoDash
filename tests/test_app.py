@@ -1,6 +1,19 @@
+from unittest.mock import patch
+
 import pytest
 
-from app import app, create_price_chart, create_summary_panel, data
+from app import (
+    app,
+    create_box_plot,
+    create_price_chart,
+    create_scatter_chart,
+    create_summary_panel,
+    create_volume_chart,
+    data,
+    update_box_plot,
+    update_charts,
+    update_scatter_chart,
+)
 from utils import calculate_price_change, find_region_extremes, format_number
 
 CONTROL_LABEL_IDS = [
@@ -197,3 +210,180 @@ def test_summary_panel_handles_no_data():
 )
 def test_format_number_formats_for_readability(raw_value, formatted_value):
     assert format_number(raw_value) == formatted_value
+
+
+def test_create_volume_chart_returns_plotly_figure_dict():
+    filtered = data.query("region == 'Albany' and type == 'organic'").head(50)
+
+    figure = create_volume_chart(filtered)
+
+    assert "data" in figure
+    assert "layout" in figure
+    volume_trace = figure["data"][0]
+    assert list(volume_trace["x"]) == list(filtered["Date"])
+    assert list(volume_trace["y"]) == list(filtered["Total Volume"])
+
+
+@pytest.mark.parametrize(
+    "group_by,query,expected_group_count",
+    [
+        (
+            "type",
+            "region == 'Albany' and Date >= '2015-01-01' and Date <= '2015-12-31'",
+            2,
+        ),
+        (
+            "region",
+            "type == 'organic' and Date >= '2015-01-01' and Date <= '2015-01-31'",
+            54,
+        ),
+        ("year", "region == 'Albany' and type == 'organic'", 4),
+    ],
+)
+def test_create_box_plot_produces_one_trace_per_group(
+    group_by, query, expected_group_count
+):
+    filtered = data.query(query)
+    assert filtered[group_by].nunique() == expected_group_count
+
+    figure = create_box_plot(filtered, "AveragePrice", group_by)
+
+    assert len(figure["data"]) == expected_group_count
+    assert all(trace["type"] == "box" for trace in figure["data"])
+
+
+def test_update_charts_returns_empty_state_for_no_matching_data():
+    price_fig, volume_fig = update_charts(
+        "Albany", "organic", "1999-01-01", "1999-12-31"
+    )
+
+    assert price_fig["data"] == []
+    assert volume_fig["data"] == []
+    assert "no data available" in price_fig["layout"]["title"].lower()
+    assert "no data available" in volume_fig["layout"]["title"].lower()
+
+
+def test_update_box_plot_groups_by_type_regardless_of_type_filter():
+    figure = update_box_plot(
+        "Albany", "organic", "2015-01-01", "2015-12-31", "AveragePrice", "type"
+    )
+
+    trace_names = {trace["name"] for trace in figure["data"]}
+    assert trace_names == {"Conventional", "Organic"}
+
+
+def test_update_charts_callback_handles_exception_without_crashing():
+    with patch("app.create_price_chart", side_effect=RuntimeError("boom")):
+        price_fig, volume_fig = update_charts(
+            "Albany", "organic", "2015-01-01", "2015-12-31"
+        )
+
+    assert price_fig["data"] == []
+    assert volume_fig["data"] == []
+    assert "error" in price_fig["layout"]["title"].lower()
+    assert "boom" in price_fig["layout"]["title"]
+
+
+def test_create_box_plot_region_grouping_with_multiple_types_uses_one_trace_per_type():
+    filtered = data.query("Date >= '2015-01-01' and Date <= '2015-01-31'")
+    assert filtered["type"].nunique() == 2
+    assert filtered["region"].nunique() > 1
+
+    figure = create_box_plot(filtered, "AveragePrice", "region")
+
+    assert len(figure["data"]) == 2
+    assert {trace["name"] for trace in figure["data"]} == {
+        "Conventional",
+        "Organic",
+    }
+    assert figure["layout"]["xaxis"]["title"] == "Region"
+
+
+def test_create_scatter_chart_returns_plotly_figure_dict():
+    filtered = data.query("region == 'Albany'").head(50)
+
+    figure = create_scatter_chart(filtered, "AveragePrice", "Total Volume")
+
+    assert "data" in figure
+    assert "layout" in figure
+    trace_names = {trace["name"] for trace in figure["data"]}
+    assert trace_names == {t.title() for t in filtered["type"].unique()}
+
+
+def test_update_scatter_chart_returns_valid_figure_for_matching_data():
+    figure = update_scatter_chart(
+        "Albany",
+        "organic",
+        "2015-01-01",
+        "2015-12-31",
+        "AveragePrice",
+        "Total Volume",
+    )
+
+    assert figure["data"]
+    assert figure["layout"]["title"]["text"] == "Averageprice vs Total Volume"
+
+
+def test_update_scatter_chart_returns_empty_state_for_no_matching_data():
+    figure = update_scatter_chart(
+        "Albany", "organic", "1999-01-01", "1999-12-31", "AveragePrice", "Total Volume"
+    )
+
+    assert figure["data"] == []
+    assert "no data available" in figure["layout"]["title"].lower()
+
+
+def test_update_scatter_chart_callback_handles_exception_without_crashing():
+    with patch("app.create_scatter_chart", side_effect=RuntimeError("boom")):
+        figure = update_scatter_chart(
+            "Albany",
+            "organic",
+            "2015-01-01",
+            "2015-12-31",
+            "AveragePrice",
+            "Total Volume",
+        )
+
+    assert figure["data"] == []
+    assert "error" in figure["layout"]["title"].lower()
+
+
+@pytest.mark.parametrize(
+    "group_by,filter_region,filter_type",
+    [
+        ("region", "Boise", "organic"),
+        ("year", "Albany", "organic"),
+    ],
+)
+def test_update_box_plot_applies_query_for_each_group_by_mode(
+    group_by, filter_region, filter_type
+):
+    figure = update_box_plot(
+        filter_region,
+        filter_type,
+        "2015-01-01",
+        "2018-12-31",
+        "AveragePrice",
+        group_by,
+    )
+
+    assert figure["data"]
+
+
+def test_update_box_plot_returns_empty_state_for_no_matching_data():
+    figure = update_box_plot(
+        "Albany", "organic", "1999-01-01", "1999-12-31", "AveragePrice", "year"
+    )
+
+    assert figure["data"] == []
+    assert "no data available" in figure["layout"]["title"].lower()
+
+
+def test_update_box_plot_callback_handles_exception_without_crashing():
+    with patch("app.create_box_plot", side_effect=RuntimeError("boom")):
+        figure = update_box_plot(
+            "Albany", "organic", "2015-01-01", "2015-12-31", "AveragePrice", "year"
+        )
+
+    assert figure["data"] == []
+    assert "error" in figure["layout"]["title"].lower()
