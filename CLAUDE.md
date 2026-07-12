@@ -281,9 +281,11 @@ module-level pattern rather than a factory/class structure:
    deployment, and the app binds `0.0.0.0:$PORT` at the bottom under
    `if __name__ == "__main__"`.
 
-`src/utils.py` contains `calculate_summary_stats` and `format_number` but
-neither is currently imported by `app.py` — treat it as scaffolding for
-future summary-stat UI, not active code.
+`src/utils.py` holds pure calculation helpers for the summary panel
+(`calculate_summary_stats`, `format_number`, `calculate_price_change`,
+`find_region_extremes`) — imported by `app.py`'s `create_summary_panel`,
+which renders them into the `summary-panel` div via the
+`update_summary_panel` callback (same filter inputs as `update_charts`).
 
 **KISS Principle:** This app deliberately stays flat (one module, plain
 dict-returning chart builders, no service/repository layers). Prefer pure
