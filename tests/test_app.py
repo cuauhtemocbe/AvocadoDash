@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from dash import dcc
 
 from app import (
     app,
@@ -50,6 +51,57 @@ def find_component_by_id(component, component_id):
             if found is not None:
                 return found
     return None
+
+
+def find_loading_ancestor(component, target_id, current_loading=None):
+    """Walk the layout tree, returning the nearest dcc.Loading ancestor of
+    the component with `target_id`, or None if it has no such ancestor."""
+    if isinstance(component, dcc.Loading):
+        current_loading = component
+
+    if getattr(component, "id", None) == target_id:
+        return current_loading
+
+    children = getattr(component, "children", None)
+    if children is None:
+        return None
+    if not isinstance(children, list):
+        children = [children]
+
+    for child in children:
+        if hasattr(child, "id") or hasattr(child, "children"):
+            found = find_loading_ancestor(child, target_id, current_loading)
+            if found is not None:
+                return found
+    return None
+
+
+def test_price_and_volume_charts_share_a_loading_indicator():
+    price_loading = find_loading_ancestor(app.layout, "price-chart")
+    volume_loading = find_loading_ancestor(app.layout, "volume-chart")
+
+    assert price_loading is not None
+    assert price_loading is volume_loading
+
+
+def test_scatter_chart_has_its_own_loading_indicator_isolated_from_other_charts():
+    scatter_loading = find_loading_ancestor(app.layout, "scatter-chart")
+    price_loading = find_loading_ancestor(app.layout, "price-chart")
+    box_loading = find_loading_ancestor(app.layout, "box-plot-chart")
+
+    assert scatter_loading is not None
+    assert scatter_loading is not price_loading
+    assert scatter_loading is not box_loading
+
+
+def test_box_plot_chart_has_its_own_loading_indicator_isolated_from_other_charts():
+    box_loading = find_loading_ancestor(app.layout, "box-plot-chart")
+    price_loading = find_loading_ancestor(app.layout, "price-chart")
+    scatter_loading = find_loading_ancestor(app.layout, "scatter-chart")
+
+    assert box_loading is not None
+    assert box_loading is not price_loading
+    assert box_loading is not scatter_loading
 
 
 def test_load_data_has_expected_columns():

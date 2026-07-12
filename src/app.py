@@ -210,24 +210,28 @@ app.layout = html.Div(
             id="summary-panel",
             className="summary-panel",
         ),
-        html.Div(
-            children=[
-                html.Div(
-                    children=dcc.Graph(
-                        id="price-chart",
-                        config={"displayModeBar": False},
+        dcc.Loading(
+            id="charts-loading",
+            type="circle",
+            children=html.Div(
+                children=[
+                    html.Div(
+                        children=dcc.Graph(
+                            id="price-chart",
+                            config={"displayModeBar": False},
+                        ),
+                        className="card",
                     ),
-                    className="card",
-                ),
-                html.Div(
-                    children=dcc.Graph(
-                        id="volume-chart",
-                        config={"displayModeBar": False},
+                    html.Div(
+                        children=dcc.Graph(
+                            id="volume-chart",
+                            config={"displayModeBar": False},
+                        ),
+                        className="card",
                     ),
-                    className="card",
-                ),
-            ],
-            className="wrapper",
+                ],
+                className="wrapper",
+            ),
         ),
         html.Div(
             children=[
@@ -303,13 +307,17 @@ app.layout = html.Div(
                     ],
                     style={"margin": "20px auto", "max-width": "800px"},
                 ),
-                html.Div(
-                    children=dcc.Graph(
-                        id="scatter-chart",
-                        config={"displayModeBar": True},
+                dcc.Loading(
+                    id="scatter-loading",
+                    type="circle",
+                    children=html.Div(
+                        children=dcc.Graph(
+                            id="scatter-chart",
+                            config={"displayModeBar": True},
+                        ),
+                        className="card",
+                        style={"margin": "20px auto", "max-width": "1000px"},
                     ),
-                    className="card",
-                    style={"margin": "20px auto", "max-width": "1000px"},
                 ),
             ]
         ),
@@ -400,13 +408,17 @@ app.layout = html.Div(
                     ],
                     style={"margin": "20px auto", "max-width": "800px"},
                 ),
-                html.Div(
-                    children=dcc.Graph(
-                        id="box-plot-chart",
-                        config={"displayModeBar": True},
+                dcc.Loading(
+                    id="box-plot-loading",
+                    type="circle",
+                    children=html.Div(
+                        children=dcc.Graph(
+                            id="box-plot-chart",
+                            config={"displayModeBar": True},
+                        ),
+                        className="card",
+                        style={"margin": "20px auto", "max-width": "1000px"},
                     ),
-                    className="card",
-                    style={"margin": "20px auto", "max-width": "1000px"},
                 ),
             ]
         ),
