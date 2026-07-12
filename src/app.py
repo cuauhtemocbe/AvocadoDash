@@ -3,7 +3,7 @@
 import os
 
 import pandas as pd
-from dash import Dash, Input, Output, dcc, html
+from dash import Dash, Input, Output, State, dcc, html, no_update
 
 from utils import (
     calculate_price_change,
@@ -205,6 +205,18 @@ app.layout = html.Div(
                 ),
             ],
             className="menu",
+        ),
+        html.Div(
+            children=[
+                html.Button(
+                    "Download CSV",
+                    id="download-csv-button",
+                    className="download-button",
+                ),
+                html.Span(id="download-status", className="download-status"),
+                dcc.Download(id="download-dataframe-csv"),
+            ],
+            className="export-section",
         ),
         html.Div(
             id="summary-panel",
@@ -793,6 +805,55 @@ def update_summary_panel(region, avocado_type, start_date, end_date):
     except Exception as e:
         print(f"Error in summary panel callback: {str(e)}")
         return html.Div(f"Error: {str(e)}", className="summary-empty")
+
+
+@app.callback(
+    Output("download-csv-button", "disabled"),
+    Output("download-status", "children"),
+    Input("region-filter", "value"),
+    Input("type-filter", "value"),
+    Input("date-range", "start_date"),
+    Input("date-range", "end_date"),
+)
+def update_download_controls(region, avocado_type, start_date, end_date):
+    """Enable/disable the CSV download button based on filter selections."""
+    try:
+        filtered_data = data.query(
+            "region == @region and type == @avocado_type"
+            " and Date >= @start_date and Date <= @end_date"
+        )
+        if filtered_data.empty:
+            return True, "No data to export."
+        return False, ""
+    except Exception as e:
+        print(f"Error in download controls callback: {str(e)}")
+        return True, f"Error: {str(e)}"
+
+
+@app.callback(
+    Output("download-dataframe-csv", "data"),
+    Input("download-csv-button", "n_clicks"),
+    State("region-filter", "value"),
+    State("type-filter", "value"),
+    State("date-range", "start_date"),
+    State("date-range", "end_date"),
+    prevent_initial_call=True,
+)
+def download_filtered_csv(n_clicks, region, avocado_type, start_date, end_date):
+    """Export the currently filtered rows as a downloadable CSV."""
+    try:
+        filtered_data = data.query(
+            "region == @region and type == @avocado_type"
+            " and Date >= @start_date and Date <= @end_date"
+        )
+        if filtered_data.empty:
+            return no_update
+        return dcc.send_data_frame(
+            filtered_data.to_csv, "avocado_filtered.csv", index=False
+        )
+    except Exception as e:
+        print(f"Error in download callback: {str(e)}")
+        return no_update
 
 
 @app.callback(

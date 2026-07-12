@@ -1,7 +1,9 @@
+import io
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
-from dash import dcc
+from dash import dcc, no_update
 
 from app import (
     app,
@@ -11,8 +13,10 @@ from app import (
     create_summary_panel,
     create_volume_chart,
     data,
+    download_filtered_csv,
     update_box_plot,
     update_charts,
+    update_download_controls,
     update_scatter_chart,
 )
 from utils import calculate_price_change, find_region_extremes, format_number
@@ -439,3 +443,78 @@ def test_update_box_plot_callback_handles_exception_without_crashing():
 
     assert figure["data"] == []
     assert "error" in figure["layout"]["title"].lower()
+
+
+def test_download_button_and_dcc_download_exist_in_layout():
+    button = find_component_by_id(app.layout, "download-csv-button")
+    download = find_component_by_id(app.layout, "download-dataframe-csv")
+
+    assert button is not None
+    assert isinstance(download, dcc.Download)
+
+
+def test_download_filtered_csv_exports_exactly_the_filtered_rows():
+    region, avocado_type = "Albany", "organic"
+    start_date, end_date = "2015-01-01", "2015-12-31"
+    filtered = data.query(
+        "region == @region and type == @avocado_type"
+        " and Date >= @start_date and Date <= @end_date"
+    )
+    assert not filtered.empty
+
+    result = download_filtered_csv(1, region, avocado_type, start_date, end_date)
+
+    assert result["filename"] == "avocado_filtered.csv"
+    downloaded = pd.read_csv(io.StringIO(result["content"]))
+    assert len(downloaded) == len(filtered)
+    assert list(downloaded.columns) == list(filtered.columns)
+
+
+def test_download_filtered_csv_header_matches_dataset_columns():
+    result = download_filtered_csv(1, "Albany", "organic", "2015-01-01", "2015-12-31")
+
+    header_row = result["content"].splitlines()[0]
+    assert header_row.split(",") == list(data.columns)
+
+
+def test_download_filtered_csv_returns_no_update_for_no_matching_data():
+    result = download_filtered_csv(1, "Albany", "organic", "1999-01-01", "1999-12-31")
+
+    assert result is no_update
+
+
+def test_download_filtered_csv_callback_handles_exception_without_crashing():
+    with patch("app.dcc.send_data_frame", side_effect=RuntimeError("boom")):
+        result = download_filtered_csv(
+            1, "Albany", "organic", "2015-01-01", "2015-12-31"
+        )
+
+    assert result is no_update
+
+
+def test_update_download_controls_disables_button_when_no_data():
+    disabled, status = update_download_controls(
+        "Albany", "organic", "1999-01-01", "1999-12-31"
+    )
+
+    assert disabled is True
+    assert "no data" in status.lower()
+
+
+def test_update_download_controls_enables_button_when_data_available():
+    disabled, status = update_download_controls(
+        "Albany", "organic", "2015-01-01", "2015-12-31"
+    )
+
+    assert disabled is False
+    assert status == ""
+
+
+def test_update_download_controls_callback_handles_exception_without_crashing():
+    with patch("app.data.query", side_effect=RuntimeError("boom")):
+        disabled, status = update_download_controls(
+            "Albany", "organic", "2015-01-01", "2015-12-31"
+        )
+
+    assert disabled is True
+    assert status != ""
