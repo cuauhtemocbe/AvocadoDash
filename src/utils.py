@@ -26,9 +26,10 @@ def format_number(num):
         return f"{num:.0f}"
 
 
-def calculate_price_change(data, region, avocado_type, start_date, end_date):
+def calculate_price_change(data, regions, avocado_type, start_date, end_date):
     """Percent change in average price vs. the immediately preceding period
-    of equal length. Returns None if either period has no data."""
+    of equal length, aggregated across all `regions`. Returns None if
+    either period has no data."""
     start = pd.to_datetime(start_date)
     end = pd.to_datetime(end_date)
     period_length_days = (end - start).days + 1
@@ -36,11 +37,11 @@ def calculate_price_change(data, region, avocado_type, start_date, end_date):
     previous_end = start - timedelta(days=1)
 
     current = data.query(
-        "region == @region and type == @avocado_type"
+        "region in @regions and type == @avocado_type"
         " and Date >= @start and Date <= @end"
     )
     previous = data[
-        (data["region"] == region)
+        (data["region"].isin(regions))
         & (data["type"] == avocado_type)
         & (data["Date"] >= previous_start)
         & (data["Date"] <= previous_end)

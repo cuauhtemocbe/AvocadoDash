@@ -30,10 +30,65 @@ def load_data():
         raise Exception(f"Error loading data: {str(e)}")
 
 
+def filter_data(regions, avocado_type, start_date, end_date):
+    """Filter the module-level dataset by selected regions/type/date-range."""
+    return data.query(
+        "region in @regions and type == @avocado_type"
+        " and Date >= @start_date and Date <= @end_date"
+    )
+
+
+EMPTY_REGION_MESSAGE = "Select at least one region to see data."
+
+
+def empty_state_figure(message):
+    """Empty Plotly figure with a centered annotation explaining why."""
+    return {
+        "data": [],
+        "layout": {
+            "title": "No data available for selected filters",
+            "annotations": [
+                {
+                    "text": message,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                    "font": {"size": 16},
+                }
+            ],
+        },
+    }
+
+
 # Load data
 data = load_data()
 regions = sorted(data["region"].unique())
 avocado_types = sorted(data["type"].unique())
+
+# Categorical palette for per-region chart lines (validated with the
+# /dataviz skill: 8 hues, worst adjacent CVD ΔE 24.2). Colors are assigned
+# per chart render, in the fixed order below, to whichever regions are
+# currently selected (not pre-assigned per region across the full ~50-region
+# roster) — with only 8 well-separated hues, a fixed global assignment would
+# alias two arbitrary regions onto the same color as soon as they're 8 apart
+# alphabetically (e.g. "Albany" and "Chicago" both selected). Since a single
+# chart realistically compares a handful of regions at once, keying color to
+# the current selection's order guarantees distinct colors for any 2-8
+# regions shown together, at the cost of a region's color shifting if the
+# selection changes — an acceptable trade-off here since the legend and
+# hover tooltip always name the region directly (never color-only identity).
+REGION_COLOR_PALETTE = [
+    "#2a78d6",  # blue
+    "#1baf7a",  # aqua
+    "#eda100",  # yellow
+    "#008300",  # green
+    "#4a3aa7",  # violet
+    "#e34948",  # red
+    "#e87ba4",  # magenta
+    "#eb6834",  # orange
+]
 
 # Define numeric columns for scatter plot
 numeric_columns = [
@@ -49,7 +104,7 @@ numeric_columns = [
 # Tooltip text for filter/control labels (rendered via the native HTML
 # `title` attribute — no extra dependency needed).
 CONTROL_TOOLTIPS = {
-    "region-filter-label": "Filter all charts to a single US market region.",
+    "region-filter-label": "Filter all charts to one or more US market regions.",
     "type-filter-label": "Filter by avocado type: conventional or organic.",
     "date-range-label": (
         "Limit all charts to sales between the selected start and end dates."
@@ -150,8 +205,9 @@ app.layout = html.Div(
                             options=[
                                 {"label": region, "value": region} for region in regions
                             ],
-                            value="Albany",
-                            clearable=False,
+                            value=["Albany"],
+                            multi=True,
+                            clearable=True,
                             searchable=True,
                             placeholder="Select a region...",
                             className="dropdown",
@@ -473,7 +529,7 @@ def summary_stat_card(label, value, extra_class=""):
     )
 
 
-def create_summary_panel(filtered_data, region, avocado_type, start_date, end_date):
+def create_summary_panel(filtered_data, regions, avocado_type, start_date, end_date):
     """Build the summary panel's KPI cards for the current filter selection."""
     if filtered_data.empty:
         return html.Div(
@@ -483,7 +539,7 @@ def create_summary_panel(filtered_data, region, avocado_type, start_date, end_da
 
     stats = calculate_summary_stats(filtered_data)
     price_change = calculate_price_change(
-        data, region, avocado_type, start_date, end_date
+        data, regions, avocado_type, start_date, end_date
     )
     extremes = find_region_extremes(data, avocado_type, start_date, end_date)
 
@@ -520,21 +576,38 @@ def create_summary_panel(filtered_data, region, avocado_type, start_date, end_da
     return html.Div(cards, className="summary-stats")
 
 
-def create_price_chart(filtered_data):
-    """Create the price chart with improved styling."""
-    return {
-        "data": [
+def _region_traces(filtered_data, y_column, hover_label, hover_format):
+    """One line+marker trace per region present in `filtered_data`, colored
+    in a fixed palette order by the current selection (see
+    REGION_COLOR_PALETTE for why this isn't a fixed per-region color)."""
+    traces = []
+    selected_regions = sorted(filtered_data["region"].unique())
+    for i, region in enumerate(selected_regions):
+        region_data = filtered_data[filtered_data["region"] == region]
+        color = REGION_COLOR_PALETTE[i % len(REGION_COLOR_PALETTE)]
+        traces.append(
             {
-                "x": filtered_data["Date"],
-                "y": filtered_data["AveragePrice"],
+                "x": region_data["Date"],
+                "y": region_data[y_column],
                 "type": "scatter",
                 "mode": "lines+markers",
-                "name": "Average Price",
-                "hovertemplate": "Date: %{x}<br>Price: $%{y:.2f}<extra></extra>",
-                "line": {"width": 3},
-                "marker": {"size": 4},
-            },
-        ],
+                "name": region,
+                "hovertemplate": (
+                    f"<b>%{{fullData.name}}</b><br>Date: %{{x}}<br>"
+                    f"{hover_label}: {hover_format}<extra></extra>"
+                ),
+                "line": {"width": 3, "color": color},
+                "marker": {"size": 4, "color": color},
+            }
+        )
+    return traces
+
+
+def create_price_chart(filtered_data):
+    """Create the price chart, one line per region in `filtered_data`."""
+    traces = _region_traces(filtered_data, "AveragePrice", "Price", "$%{y:.2f}")
+    return {
+        "data": traces,
         "layout": {
             "title": {
                 "text": "Average Price of Avocados",
@@ -555,28 +628,25 @@ def create_price_chart(filtered_data):
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
-            "colorway": ["#17B897"],
             "plot_bgcolor": "white",
             "paper_bgcolor": "white",
+            "showlegend": len(traces) > 1,
+            "legend": {
+                "x": 1.02,
+                "y": 1,
+                "bgcolor": "rgba(255,255,255,0.8)",
+                "bordercolor": "gray",
+                "borderwidth": 1,
+            },
         },
     }
 
 
 def create_volume_chart(filtered_data):
-    """Create the volume chart with improved styling."""
+    """Create the volume chart, one line per region in `filtered_data`."""
+    traces = _region_traces(filtered_data, "Total Volume", "Volume", "%{y:,.0f}")
     return {
-        "data": [
-            {
-                "x": filtered_data["Date"],
-                "y": filtered_data["Total Volume"],
-                "type": "scatter",
-                "mode": "lines+markers",
-                "name": "Volume Sold",
-                "hovertemplate": "Date: %{x}<br>Volume: %{y:,.0f}<extra></extra>",
-                "line": {"width": 3},
-                "marker": {"size": 4},
-            },
-        ],
+        "data": traces,
         "layout": {
             "title": {
                 "text": "Avocados Sold (Volume)",
@@ -596,9 +666,16 @@ def create_volume_chart(filtered_data):
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
-            "colorway": ["#E12D39"],
             "plot_bgcolor": "white",
             "paper_bgcolor": "white",
+            "showlegend": len(traces) > 1,
+            "legend": {
+                "x": 1.02,
+                "y": 1,
+                "bgcolor": "rgba(255,255,255,0.8)",
+                "bordercolor": "gray",
+                "borderwidth": 1,
+            },
         },
     }
 
@@ -792,15 +869,14 @@ def create_scatter_chart(filtered_data, x_col, y_col):
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
 )
-def update_summary_panel(region, avocado_type, start_date, end_date):
+def update_summary_panel(regions, avocado_type, start_date, end_date):
     """Update the summary panel based on filter selections."""
     try:
-        filtered_data = data.query(
-            "region == @region and type == @avocado_type"
-            " and Date >= @start_date and Date <= @end_date"
-        )
+        if not regions:
+            return html.Div(EMPTY_REGION_MESSAGE, className="summary-empty")
+        filtered_data = filter_data(regions, avocado_type, start_date, end_date)
         return create_summary_panel(
-            filtered_data, region, avocado_type, start_date, end_date
+            filtered_data, regions, avocado_type, start_date, end_date
         )
     except Exception as e:
         print(f"Error in summary panel callback: {str(e)}")
@@ -815,13 +891,12 @@ def update_summary_panel(region, avocado_type, start_date, end_date):
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
 )
-def update_download_controls(region, avocado_type, start_date, end_date):
+def update_download_controls(regions, avocado_type, start_date, end_date):
     """Enable/disable the CSV download button based on filter selections."""
     try:
-        filtered_data = data.query(
-            "region == @region and type == @avocado_type"
-            " and Date >= @start_date and Date <= @end_date"
-        )
+        if not regions:
+            return True, EMPTY_REGION_MESSAGE
+        filtered_data = filter_data(regions, avocado_type, start_date, end_date)
         if filtered_data.empty:
             return True, "No data to export."
         return False, ""
@@ -839,13 +914,12 @@ def update_download_controls(region, avocado_type, start_date, end_date):
     State("date-range", "end_date"),
     prevent_initial_call=True,
 )
-def download_filtered_csv(n_clicks, region, avocado_type, start_date, end_date):
+def download_filtered_csv(n_clicks, regions, avocado_type, start_date, end_date):
     """Export the currently filtered rows as a downloadable CSV."""
     try:
-        filtered_data = data.query(
-            "region == @region and type == @avocado_type"
-            " and Date >= @start_date and Date <= @end_date"
-        )
+        if not regions:
+            return no_update
+        filtered_data = filter_data(regions, avocado_type, start_date, end_date)
         if filtered_data.empty:
             return no_update
         return dcc.send_data_frame(
@@ -864,34 +938,19 @@ def download_filtered_csv(n_clicks, region, avocado_type, start_date, end_date):
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
 )
-def update_charts(region, avocado_type, start_date, end_date):
+def update_charts(regions, avocado_type, start_date, end_date):
     """Update charts based on filter selections."""
     try:
+        if not regions:
+            empty_fig = empty_state_figure(EMPTY_REGION_MESSAGE)
+            return empty_fig, empty_fig
+
         # Filter data based on selections
-        filtered_data = data.query(
-            "region == @region and type == @avocado_type"
-            " and Date >= @start_date and Date <= @end_date"
-        )
+        filtered_data = filter_data(regions, avocado_type, start_date, end_date)
 
         # Handle empty data case
         if filtered_data.empty:
-            empty_fig = {
-                "data": [],
-                "layout": {
-                    "title": "No data available for selected filters",
-                    "annotations": [
-                        {
-                            "text": "Try adjusting your filters",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 16},
-                        }
-                    ],
-                },
-            }
+            empty_fig = empty_state_figure("Try adjusting your filters")
             return empty_fig, empty_fig
 
         return create_price_chart(filtered_data), create_volume_chart(filtered_data)
@@ -912,34 +971,18 @@ def update_charts(region, avocado_type, start_date, end_date):
     Input("x-axis-dropdown", "value"),
     Input("y-axis-dropdown", "value"),
 )
-def update_scatter_chart(region, avocado_type, start_date, end_date, x_col, y_col):
+def update_scatter_chart(regions, avocado_type, start_date, end_date, x_col, y_col):
     """Update scatter chart based on filter selections and axis choices."""
     try:
+        if not regions:
+            return empty_state_figure(EMPTY_REGION_MESSAGE)
+
         # Filter data based on selections
-        filtered_data = data.query(
-            "region == @region and type == @avocado_type"
-            " and Date >= @start_date and Date <= @end_date"
-        )
+        filtered_data = filter_data(regions, avocado_type, start_date, end_date)
 
         # Handle empty data case
         if filtered_data.empty:
-            return {
-                "data": [],
-                "layout": {
-                    "title": "No data available for selected filters",
-                    "annotations": [
-                        {
-                            "text": "Try adjusting your filters",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 16},
-                        }
-                    ],
-                },
-            }
+            return empty_state_figure("Try adjusting your filters")
 
         return create_scatter_chart(filtered_data, x_col, y_col)
 
@@ -957,53 +1000,32 @@ def update_scatter_chart(region, avocado_type, start_date, end_date, x_col, y_co
     Input("box-plot-column", "value"),
     Input("box-plot-groupby", "value"),
 )
-def update_box_plot(region, avocado_type, start_date, end_date, column, group_by):
+def update_box_plot(regions, avocado_type, start_date, end_date, column, group_by):
     """Update box plot based on filter selections and grouping choice."""
     try:
         # For box plots, we might want to show data across different groups
         # So we'll modify the filtering based on the group_by selection
-        if group_by == "type":
-            # Show both types, but filter by region and date
-            filtered_data = data.query(
-                "region == @region and Date >= @start_date and Date <= @end_date"
-            )
-        elif group_by == "region":
-            # Show data for selected type across regions (or all types if comparing)
+        if group_by == "region":
+            # Show data for selected type across every region, regardless of
+            # the region filter (grouping by region shouldn't also pin it).
             filtered_data = data.query(
                 "type == @avocado_type and Date >= @start_date and Date <= @end_date"
             )
-        elif group_by == "year":
-            # Show data for selected region and type across years
-            filtered_data = data.query(
-                "region == @region and type == @avocado_type"
-                " and Date >= @start_date and Date <= @end_date"
-            )
         else:
-            # Default filtering
-            filtered_data = data.query(
-                "region == @region and type == @avocado_type"
-                " and Date >= @start_date and Date <= @end_date"
-            )
+            if not regions:
+                return empty_state_figure(EMPTY_REGION_MESSAGE)
+            if group_by == "type":
+                # Show both types, but filter by regions and date
+                filtered_data = data.query(
+                    "region in @regions and Date >= @start_date and Date <= @end_date"
+                )
+            else:
+                # "year", or any other grouping: full region/type/date filter
+                filtered_data = filter_data(regions, avocado_type, start_date, end_date)
 
         # Handle empty data case
         if filtered_data.empty:
-            return {
-                "data": [],
-                "layout": {
-                    "title": "No data available for selected filters",
-                    "annotations": [
-                        {
-                            "text": "Try adjusting your filters",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 16},
-                        }
-                    ],
-                },
-            }
+            return empty_state_figure("Try adjusting your filters")
 
         return create_box_plot(filtered_data, column, group_by)
 
