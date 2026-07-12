@@ -39,6 +39,46 @@ numeric_columns = [
     "year",
 ]
 
+# Tooltip text for filter/control labels (rendered via the native HTML
+# `title` attribute — no extra dependency needed).
+CONTROL_TOOLTIPS = {
+    "region-filter-label": "Filter all charts to a single US market region.",
+    "type-filter-label": "Filter by avocado type: conventional or organic.",
+    "date-range-label": (
+        "Limit all charts to sales between the selected start and end dates."
+    ),
+    "x-axis-label": "Choose which metric to plot on the scatter chart's X axis.",
+    "y-axis-label": "Choose which metric to plot on the scatter chart's Y axis.",
+    "box-plot-column-label": "Choose which metric's distribution to visualize.",
+    "box-plot-groupby-label": (
+        "Choose how to group the box plot: by avocado type, region, or year."
+    ),
+}
+
+# Tooltip text for individual metric dropdown options (rendered via
+# dcc.Dropdown's per-option `title` key).
+COLUMN_TOOLTIPS = {
+    "AveragePrice": "Average price per single avocado (USD).",
+    "Total Volume": "Total number of avocados sold.",
+    "Total Bags": "Total bags sold, across all bag sizes.",
+    "Small Bags": "Bags sold in the small size category.",
+    "Large Bags": "Bags sold in the large size category.",
+    "XLarge Bags": "Bags sold in the extra-large size category.",
+    "year": "Calendar year of the sale.",
+}
+
+GROUPBY_TOOLTIPS = {
+    "type": "One box per avocado type (conventional vs organic).",
+    "region": "One box per US region.",
+    "year": "One box per calendar year.",
+}
+
+
+def info_icon(tooltip_text):
+    """Small circular "i" badge that shows `tooltip_text` as a tooltip on hover."""
+    return html.Span("i", className="info-icon", title=tooltip_text)
+
+
 external_stylesheets = [
     {
         "href": (
@@ -90,7 +130,14 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=[
-                        html.Div(children="Region", className="menu-title"),
+                        html.Div(
+                            id="region-filter-label",
+                            children=[
+                                "Region",
+                                info_icon(CONTROL_TOOLTIPS["region-filter-label"]),
+                            ],
+                            className="menu-title",
+                        ),
                         dcc.Dropdown(
                             id="region-filter",
                             options=[
@@ -106,7 +153,14 @@ app.layout = html.Div(
                 ),
                 html.Div(
                     children=[
-                        html.Div(children="Type", className="menu-title"),
+                        html.Div(
+                            id="type-filter-label",
+                            children=[
+                                "Type",
+                                info_icon(CONTROL_TOOLTIPS["type-filter-label"]),
+                            ],
+                            className="menu-title",
+                        ),
                         dcc.Dropdown(
                             id="type-filter",
                             options=[
@@ -125,7 +179,14 @@ app.layout = html.Div(
                 ),
                 html.Div(
                     children=[
-                        html.Div(children="Date Range", className="menu-title"),
+                        html.Div(
+                            id="date-range-label",
+                            children=[
+                                "Date Range",
+                                info_icon(CONTROL_TOOLTIPS["date-range-label"]),
+                            ],
+                            className="menu-title",
+                        ),
                         dcc.DatePickerRange(
                             id="date-range",
                             min_date_allowed=data["Date"].min().date(),
@@ -173,7 +234,11 @@ app.layout = html.Div(
                         html.Div(
                             children=[
                                 html.Div(
-                                    children="X-Axis Column",
+                                    id="x-axis-label",
+                                    children=[
+                                        "X-Axis Column",
+                                        info_icon(CONTROL_TOOLTIPS["x-axis-label"]),
+                                    ],
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
@@ -182,6 +247,7 @@ app.layout = html.Div(
                                         {
                                             "label": col.replace("_", " ").title(),
                                             "value": col,
+                                            "title": COLUMN_TOOLTIPS[col],
                                         }
                                         for col in numeric_columns
                                     ],
@@ -195,7 +261,11 @@ app.layout = html.Div(
                         html.Div(
                             children=[
                                 html.Div(
-                                    children="Y-Axis Column",
+                                    id="y-axis-label",
+                                    children=[
+                                        "Y-Axis Column",
+                                        info_icon(CONTROL_TOOLTIPS["y-axis-label"]),
+                                    ],
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
@@ -204,6 +274,7 @@ app.layout = html.Div(
                                         {
                                             "label": col.replace("_", " ").title(),
                                             "value": col,
+                                            "title": COLUMN_TOOLTIPS[col],
                                         }
                                         for col in numeric_columns
                                     ],
@@ -247,7 +318,13 @@ app.layout = html.Div(
                         html.Div(
                             children=[
                                 html.Div(
-                                    children="Column to Analyze",
+                                    id="box-plot-column-label",
+                                    children=[
+                                        "Column to Analyze",
+                                        info_icon(
+                                            CONTROL_TOOLTIPS["box-plot-column-label"]
+                                        ),
+                                    ],
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
@@ -256,6 +333,7 @@ app.layout = html.Div(
                                         {
                                             "label": col.replace("_", " ").title(),
                                             "value": col,
+                                            "title": COLUMN_TOOLTIPS[col],
                                         }
                                         for col in numeric_columns
                                     ],
@@ -268,13 +346,34 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
-                                html.Div(children="Group By", className="menu-title"),
+                                html.Div(
+                                    id="box-plot-groupby-label",
+                                    children=[
+                                        "Group By",
+                                        info_icon(
+                                            CONTROL_TOOLTIPS["box-plot-groupby-label"]
+                                        ),
+                                    ],
+                                    className="menu-title",
+                                ),
                                 dcc.Dropdown(
                                     id="box-plot-groupby",
                                     options=[
-                                        {"label": "Avocado Type", "value": "type"},
-                                        {"label": "Region", "value": "region"},
-                                        {"label": "Year", "value": "year"},
+                                        {
+                                            "label": "Avocado Type",
+                                            "value": "type",
+                                            "title": GROUPBY_TOOLTIPS["type"],
+                                        },
+                                        {
+                                            "label": "Region",
+                                            "value": "region",
+                                            "title": GROUPBY_TOOLTIPS["region"],
+                                        },
+                                        {
+                                            "label": "Year",
+                                            "value": "year",
+                                            "title": GROUPBY_TOOLTIPS["year"],
+                                        },
                                     ],
                                     value="type",
                                     clearable=False,
