@@ -5,6 +5,13 @@ import os
 import pandas as pd
 from dash import Dash, Input, Output, dcc, html
 
+from utils import (
+    calculate_price_change,
+    calculate_summary_stats,
+    find_region_extremes,
+    format_number,
+)
+
 
 def load_data():
     """Load and preprocess the avocado dataset."""
@@ -198,6 +205,10 @@ app.layout = html.Div(
                 ),
             ],
             className="menu",
+        ),
+        html.Div(
+            id="summary-panel",
+            className="summary-panel",
         ),
         html.Div(
             children=[
@@ -425,6 +436,64 @@ app.layout = html.Div(
         ),
     ]
 )
+
+
+def summary_stat_card(label, value, extra_class=""):
+    """A single KPI card for the summary panel."""
+    return html.Div(
+        children=[
+            html.Div(label, className="summary-stat-label"),
+            html.Div(value, className=f"summary-stat-value {extra_class}".strip()),
+        ],
+        className="summary-stat",
+    )
+
+
+def create_summary_panel(filtered_data, region, avocado_type, start_date, end_date):
+    """Build the summary panel's KPI cards for the current filter selection."""
+    if filtered_data.empty:
+        return html.Div(
+            "No data available for this selection.",
+            className="summary-empty",
+        )
+
+    stats = calculate_summary_stats(filtered_data)
+    price_change = calculate_price_change(
+        data, region, avocado_type, start_date, end_date
+    )
+    extremes = find_region_extremes(data, avocado_type, start_date, end_date)
+
+    cards = [
+        summary_stat_card("Average Price", f"${stats['avg_price']:.2f}"),
+        summary_stat_card("Total Volume", format_number(stats["total_volume"])),
+    ]
+
+    if price_change is not None:
+        sign = "+" if price_change >= 0 else ""
+        trend_class = "summary-stat-up" if price_change >= 0 else "summary-stat-down"
+        cards.append(
+            summary_stat_card(
+                "Price Change vs. Previous Period",
+                f"{sign}{price_change:.1f}%",
+                trend_class,
+            )
+        )
+
+    if extremes is not None:
+        cards.append(
+            summary_stat_card(
+                "Best Region (avg. price)",
+                f"{extremes['best_region']} (${extremes['best_price']:.2f})",
+            )
+        )
+        cards.append(
+            summary_stat_card(
+                "Worst Region (avg. price)",
+                f"{extremes['worst_region']} (${extremes['worst_price']:.2f})",
+            )
+        )
+
+    return html.Div(cards, className="summary-stats")
 
 
 def create_price_chart(filtered_data):
@@ -690,6 +759,28 @@ def create_scatter_chart(filtered_data, x_col, y_col):
             },
         },
     }
+
+
+@app.callback(
+    Output("summary-panel", "children"),
+    Input("region-filter", "value"),
+    Input("type-filter", "value"),
+    Input("date-range", "start_date"),
+    Input("date-range", "end_date"),
+)
+def update_summary_panel(region, avocado_type, start_date, end_date):
+    """Update the summary panel based on filter selections."""
+    try:
+        filtered_data = data.query(
+            "region == @region and type == @avocado_type"
+            " and Date >= @start_date and Date <= @end_date"
+        )
+        return create_summary_panel(
+            filtered_data, region, avocado_type, start_date, end_date
+        )
+    except Exception as e:
+        print(f"Error in summary panel callback: {str(e)}")
+        return html.Div(f"Error: {str(e)}", className="summary-empty")
 
 
 @app.callback(
