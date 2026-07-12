@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Lints the codebase with ruff before allowing a commit.
+# Enable with: make install-hooks
+set -euo pipefail
+
+echo "Running ruff lint checks..."
+poetry run ruff check .
+
+echo "Checking code formatting with ruff..."
+poetry run ruff format --check .

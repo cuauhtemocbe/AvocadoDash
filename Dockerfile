@@ -16,8 +16,8 @@ RUN poetry config virtualenvs.create false
 # Copy application code
 COPY . .
 
-# Install Python dependencies
-RUN poetry install --no-root
+# Install Python dependencies (production only, skip dev/test tooling)
+RUN poetry install --no-root --only main
 
 # Expose port (Railway will override this)
 EXPOSE 8050
