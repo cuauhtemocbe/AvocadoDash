@@ -11,32 +11,43 @@ dataset). It is deployed on Railway.
 ## Commands
 
 Dependency management is via Poetry (Python 3.12.6 pinned in `pyproject.toml`).
+Most of these are wrapped by the `Makefile` — run `make help` for the full list.
 
 ```bash
 # Install dependencies
-poetry install
+poetry install                  # or: make install
 
-# Run the app locally (serves on http://localhost:8050)
-poetry run python src/app.py
+# Run the app outside the container (serves on http://localhost:8050)
+poetry run python src/app.py    # or: make run
 
-# Docker
-docker build -t avocado-dash .
-docker run -p 8050:8050 avocado-dash
+# Tests (pytest, config in [tool.pytest.ini_options] in pyproject.toml)
+poetry run pytest               # or: make test
 
-# Docker Compose (dev container, drops into a bash shell)
-docker-compose up --build
+# Lint / format (Ruff — handles both)
+poetry run ruff check .         # or: make lint
+poetry run ruff format .        # or: make format
+
+# Docker (production image, no devcontainer involved)
+docker build -t avocado-dash .  # or: make docker-build
+docker run -p 8050:8050 avocado-dash  # or: make docker-run
 ```
 
-There is currently no test suite, linter, or formatter configured in this
-repo (`.vscode/settings.json` references `black` and a `tests` directory for
-editor convenience only — neither a formatter config nor a `tests/` dir
-exists yet). Do not assume `pytest`/`black`/`ruff` commands work until such
-config is actually added. The `/testing`, `/sonar-check`, and `/trivy-scan`
-skills below describe target workflows for when that tooling is introduced.
+Ruff (`[tool.ruff]` in `pyproject.toml`) is the linter and formatter — line
+length 88, target `py312`. Pytest is configured with `pythonpath = ["src"]`
+so tests import `app` directly (see `tests/test_app.py`). A pre-commit git
+hook (`.githooks/pre-commit`, enabled via `make install-hooks`) runs
+`ruff check` + `ruff format --check` before every commit.
+
+`.devcontainer/` and the root `docker-compose.yml` are kept only for
+backward compatibility with VS Code Dev Containers — they are not the
+primary Docker workflow anymore (that's the `Makefile`'s `docker-*` targets
+against the production `Dockerfile`), and shouldn't be extended.
 
 Railway deployment config lives in `railway.json`; it runs the same
 `poetry run python src/app.py` start command and reads the port from the
-`PORT` env var (see bottom of `src/app.py`).
+`PORT` env var (see bottom of `src/app.py`). The Dockerfile installs only
+the `main` dependency group (`poetry install --no-root --only main`) so
+Ruff/pytest never ship in the production image.
 
 ---
 

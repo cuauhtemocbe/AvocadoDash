@@ -54,7 +54,11 @@ AvocadoDash/
 │   └── assets/
 │       ├── favicon.ico     # Ícono del sitio
 │       └── style.css       # Estilos CSS personalizados
-├── docker-compose.yml      # Configuración de Docker Compose
+├── tests/                  # Tests (pytest)
+├── .githooks/              # Git hooks versionados (lint pre-commit)
+├── .devcontainer/          # Config de VS Code Dev Containers (legacy, ver abajo)
+├── Makefile                # Atajos para desarrollo, Docker y tests
+├── docker-compose.yml      # Docker Compose usado por .devcontainer (legacy)
 ├── Dockerfile              # Configuración del contenedor Docker
 ├── pyproject.toml          # Dependencias con Poetry
 ├── poetry.lock             # Versiones bloqueadas de dependencias
@@ -77,9 +81,11 @@ curl -sSL https://install.python-poetry.org | python3 -
 
 # Instalar dependencias
 poetry install
+# o: make install
 
 # Ejecutar la aplicación
 poetry run python src/app.py
+# o: make run
 ```
 
 Abrir en el navegador 👉 `http://localhost:8050`
@@ -94,15 +100,70 @@ cd AvocadoDash
 
 docker build -t avocado-dash .
 docker run -p 8050:8050 avocado-dash
+
+# equivalente con el Makefile:
+make docker-build
+make docker-run
 ```
 
 ---
 
-### Opción 3: Usando Docker Compose
+## 🧰 Makefile
+
+El proyecto incluye un `Makefile` con los comandos más comunes para desarrollar
+**fuera del contenedor** (usando Poetry) y para construir/levantar la imagen
+de Docker. Ver todos los comandos disponibles con:
 
 ```bash
-docker-compose up --build
+make help
 ```
+
+| Comando              | Descripción                                                |
+|----------------------|-------------------------------------------------------------|
+| `make install`        | Instala las dependencias con Poetry                        |
+| `make run`            | Levanta la app fuera del contenedor (`http://localhost:8050`) |
+| `make test`           | Ejecuta la suite de tests (pytest) fuera del contenedor     |
+| `make lint`           | Corre `ruff check` sobre el código                          |
+| `make format`         | Formatea el código con `ruff format`                        |
+| `make format-check`   | Verifica el formato sin modificar archivos                  |
+| `make docker-build`   | Construye la imagen Docker                                  |
+| `make docker-run`     | Levanta la app dentro de un contenedor Docker                |
+| `make docker-stop`    | Detiene el contenedor en ejecución                           |
+| `make docker-shell`   | Abre una shell dentro de la imagen Docker                    |
+| `make install-hooks`  | Habilita los git hooks del repo (lint en pre-commit)         |
+
+---
+
+## ✅ Tests y Lint
+
+- **Tests**: `pytest` (ver `tests/`). Correr con `make test` o `poetry run pytest`.
+- **Lint y formato**: [Ruff](https://docs.astral.sh/ruff/) se encarga tanto del
+  linting (`make lint`) como del formateo (`make format` / `make format-check`).
+- **Git hook de pre-commit**: corre `ruff check` y `ruff format --check` antes
+  de cada commit, para que el código nunca llegue a `main` sin pasar el lint.
+  Se activa una sola vez por clon del repo con:
+
+  ```bash
+  make install-hooks
+  ```
+
+  El hook vive versionado en `.githooks/pre-commit` (no en `.git/hooks/`, que
+  no se sube al repositorio), y `make install-hooks` simplemente apunta
+  `core.hooksPath` a esa carpeta.
+
+---
+
+## 🐳 Docker y Dev Containers
+
+El flujo recomendado para trabajar con contenedores es el `Makefile`
+(`make docker-build`, `make docker-run`, `make docker-shell`), que usa
+`docker build` / `docker run` directamente sobre el `Dockerfile` de
+producción.
+
+La carpeta `.devcontainer/` (y el `docker-compose.yml` que la acompaña) se
+mantiene únicamente por **retrocompatibilidad** con quienes todavía abren el
+proyecto en VS Code con la extensión Dev Containers — ya no es el flujo
+principal de desarrollo y no recibe nuevas funcionalidades.
 
 ---
 

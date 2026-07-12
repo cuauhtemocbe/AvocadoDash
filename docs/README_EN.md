@@ -48,7 +48,11 @@ AvocadoDash/
 │   └── assets/
 │       ├── favicon.ico     # Site icon
 │       └── style.css       # Custom CSS styling
-├── docker-compose.yml      # Docker Compose configuration
+├── tests/                  # Tests (pytest)
+├── .githooks/              # Versioned git hooks (pre-commit lint)
+├── .devcontainer/          # VS Code Dev Containers config (legacy, see below)
+├── Makefile                # Shortcuts for development, Docker, and tests
+├── docker-compose.yml      # Docker Compose used by .devcontainer (legacy)
 ├── Dockerfile              # Docker container setup
 ├── pyproject.toml          # Poetry dependencies
 ├── poetry.lock             # Locked dependency versions
@@ -70,9 +74,11 @@ curl -sSL https://install.python-poetry.org | python3 -
 
 # Install dependencies
 poetry install
+# or: make install
 
 # Run application
 poetry run python src/app.py
+# or: make run
 
 Open your browser at 👉 http://localhost:8050
 
@@ -86,11 +92,67 @@ cd AvocadoDash
 docker build -t avocado-dash .
 docker run -p 8050:8050 avocado-dash
 
+# Makefile equivalent:
+make docker-build
+make docker-run
+
 ---
 
-### Option 3: Using Docker Compose
+## 🧰 Makefile
 
-docker-compose up --build
+The project ships a `Makefile` with the most common commands for developing
+**outside the container** (via Poetry) and for building/running the Docker
+image. List everything available with:
+
+```bash
+make help
+```
+
+| Command               | Description                                                  |
+|------------------------|---------------------------------------------------------------|
+| `make install`         | Install dependencies with Poetry                              |
+| `make run`             | Run the app outside the container (`http://localhost:8050`)   |
+| `make test`            | Run the test suite (pytest) outside the container              |
+| `make lint`            | Run `ruff check` on the codebase                               |
+| `make format`          | Format the code with `ruff format`                             |
+| `make format-check`    | Check formatting without modifying files                       |
+| `make docker-build`    | Build the Docker image                                         |
+| `make docker-run`      | Run the app inside a Docker container                          |
+| `make docker-stop`     | Stop the running container                                     |
+| `make docker-shell`    | Open a shell inside the Docker image                           |
+| `make install-hooks`   | Enable the repo's git hooks (pre-commit lint)                  |
+
+---
+
+## ✅ Tests & Lint
+
+- **Tests**: `pytest` (see `tests/`). Run with `make test` or `poetry run pytest`.
+- **Lint & formatting**: [Ruff](https://docs.astral.sh/ruff/) handles both
+  linting (`make lint`) and formatting (`make format` / `make format-check`).
+- **Pre-commit git hook**: runs `ruff check` and `ruff format --check` before
+  every commit, so unlinted code never reaches `main`. Enable it once per
+  clone with:
+
+  ```bash
+  make install-hooks
+  ```
+
+  The hook lives in the versioned `.githooks/pre-commit` (not `.git/hooks/`,
+  which isn't tracked by git); `make install-hooks` just points
+  `core.hooksPath` at that folder.
+
+---
+
+## 🐳 Docker & Dev Containers
+
+The recommended container workflow is the `Makefile`
+(`make docker-build`, `make docker-run`, `make docker-shell`), which uses
+`docker build` / `docker run` directly against the production `Dockerfile`.
+
+The `.devcontainer/` folder (and its companion `docker-compose.yml`) is kept
+only for **backward compatibility** with anyone still opening the project in
+VS Code with the Dev Containers extension — it's no longer the primary
+development workflow and won't receive new features.
 
 ---
 
