@@ -15,12 +15,6 @@ Construido con **Python Dash**, incluye múltiples tipos de visualizaciones para
 
 ---
 
-## 📖 Versión en inglés
-
-Para leer la documentación en inglés, visita: [README en inglés](./docs/README_EN.md)
-
----
-
 ## 🚀 Características
 
 - **📊 Gráficas de Series de Tiempo Interactivas** – Analiza tendencias de precios y volúmenes de ventas
@@ -56,9 +50,7 @@ AvocadoDash/
 │       └── style.css       # Estilos CSS personalizados
 ├── tests/                  # Tests (pytest)
 ├── .githooks/              # Git hooks versionados (lint pre-commit)
-├── .devcontainer/          # Config de VS Code Dev Containers (legacy, ver abajo)
 ├── Makefile                # Atajos para desarrollo, Docker y tests
-├── docker-compose.yml      # Docker Compose usado por .devcontainer (legacy)
 ├── Dockerfile              # Configuración del contenedor Docker
 ├── pyproject.toml          # Dependencias con Poetry
 ├── poetry.lock             # Versiones bloqueadas de dependencias
@@ -69,7 +61,25 @@ AvocadoDash/
 
 ## 🔧 Instalación y Configuración
 
-### Opción 1: Usando Poetry (Recomendado)
+### Opción 1: Docker con hot-reload (Recomendado)
+
+Flujo recomendado para desarrollar: el código se edita en el host con tu
+editor de siempre, pero la app corre dentro del contenedor y se recarga sola
+al guardar, gracias al reloader integrado de Dash.
+
+```bash
+git clone https://github.com/cuauhtemocbe/AvocadoDash.git
+cd AvocadoDash
+
+make docker-build   # solo la primera vez o si cambian las dependencias
+make run
+```
+
+Abrir en el navegador 👉 `http://localhost:8050`
+
+---
+
+### Opción 2: Usando Poetry (sin Docker)
 
 ```bash
 # Clonar el repositorio
@@ -81,18 +91,16 @@ curl -sSL https://install.python-poetry.org | python3 -
 
 # Instalar dependencias
 poetry install
-# o: make install
 
 # Ejecutar la aplicación
 poetry run python src/app.py
-# o: make run
 ```
 
 Abrir en el navegador 👉 `http://localhost:8050`
 
 ---
 
-### Opción 2: Usando Docker
+### Opción 3: Docker sin hot-reload (imagen de producción)
 
 ```bash
 git clone https://github.com/cuauhtemocbe/AvocadoDash.git
@@ -110,9 +118,10 @@ make docker-run
 
 ## 🧰 Makefile
 
-El proyecto incluye un `Makefile` con los comandos más comunes para desarrollar
-**fuera del contenedor** (usando Poetry) y para construir/levantar la imagen
-de Docker. Ver todos los comandos disponibles con:
+El proyecto incluye un `Makefile` con los comandos más comunes: el flujo de
+desarrollo recomendado (`make run`, Docker con hot-reload), tests/lint
+corriendo también dentro de Docker, y el build/run de las imágenes. Ver
+todos los comandos disponibles con:
 
 ```bash
 make help
@@ -120,28 +129,33 @@ make help
 
 | Comando              | Descripción                                                |
 |----------------------|-------------------------------------------------------------|
-| `make install`        | Instala las dependencias con Poetry                        |
-| `make run`            | Levanta la app fuera del contenedor (`http://localhost:8050`) |
-| `make test`           | Ejecuta la suite de tests (pytest) fuera del contenedor     |
-| `make lint`           | Corre `ruff check` sobre el código                          |
-| `make format`         | Formatea el código con `ruff format`                        |
-| `make format-check`   | Verifica el formato sin modificar archivos                  |
-| `make docker-build`   | Construye la imagen Docker                                  |
-| `make docker-run`     | Levanta la app dentro de un contenedor Docker                |
-| `make docker-stop`    | Detiene el contenedor en ejecución                           |
-| `make docker-shell`   | Abre una shell dentro de la imagen Docker                    |
+| `make run`              | Levanta la app en Docker con hot-reload (`http://localhost:8050`). Requiere `make docker-build` antes |
+| `make test`            | Ejecuta la suite de tests (pytest) dentro de Docker. Requiere `make docker-build-dev` antes |
+| `make lint`            | Corre `ruff check` dentro de Docker. Requiere `make docker-build-dev` antes |
+| `make format`          | Formatea el código con `ruff format` dentro de Docker. Requiere `make docker-build-dev` antes |
+| `make format-check`    | Verifica el formato sin modificar archivos, dentro de Docker |
+| `make docker-build`   | Construye la imagen Docker de producción                    |
+| `make docker-build-dev`| Construye la imagen Docker de desarrollo (incluye pytest y ruff) |
+| `make docker-run`     | Levanta la app dentro de un contenedor Docker (imagen de producción, sin hot-reload) |
+| `make docker-stop`    | Detiene los contenedores en ejecución (producción y dev)     |
+| `make docker-shell`   | Abre una shell dentro de la imagen Docker de producción      |
 | `make install-hooks`  | Habilita los git hooks del repo (lint en pre-commit)         |
 
 ---
 
 ## ✅ Tests y Lint
 
-- **Tests**: `pytest` (ver `tests/`). Correr con `make test` o `poetry run pytest`.
+- **Tests**: `pytest` (ver `tests/`). Correr con `make test` (dentro de Docker,
+  imagen `avocadodash:dev`) — requiere haber corrido `make docker-build-dev`
+  al menos una vez, o al cambiar dependencias.
 - **Lint y formato**: [Ruff](https://docs.astral.sh/ruff/) se encarga tanto del
-  linting (`make lint`) como del formateo (`make format` / `make format-check`).
-- **Git hook de pre-commit**: corre `ruff check` y `ruff format --check` antes
-  de cada commit, para que el código nunca llegue a `main` sin pasar el lint.
-  Se activa una sola vez por clon del repo con:
+  linting (`make lint`) como del formateo (`make format` / `make format-check`),
+  también dentro de Docker.
+- **Git hook de pre-commit**: corre `make lint` y `make format-check` antes
+  de cada commit (o sea, también dentro de Docker), para que el código nunca
+  llegue a `main` sin pasar el lint. Requiere haber corrido
+  `make docker-build-dev` al menos una vez. Se activa una sola vez por clon
+  del repo con:
 
   ```bash
   make install-hooks
@@ -153,17 +167,27 @@ make help
 
 ---
 
-## 🐳 Docker y Dev Containers
+## 🐳 Docker
 
-El flujo recomendado para trabajar con contenedores es el `Makefile`
-(`make docker-build`, `make docker-run`, `make docker-shell`), que usa
-`docker build` / `docker run` directamente sobre el `Dockerfile` de
-producción.
+Todo el flujo de contenedores pasa por el `Makefile` (`make docker-build`,
+`make docker-build-dev`, `make run`, `make test`/`make lint`/`make format*`,
+`make docker-run`, `make docker-shell`), que usa `docker build` / `docker
+run` directamente sobre el `Dockerfile` — no hay Docker Compose ni Dev
+Containers de por medio.
 
-La carpeta `.devcontainer/` (y el `docker-compose.yml` que la acompaña) se
-mantiene únicamente por **retrocompatibilidad** con quienes todavía abren el
-proyecto en VS Code con la extensión Dev Containers — ya no es el flujo
-principal de desarrollo y no recibe nuevas funcionalidades.
+El `Dockerfile` es multi-stage: un stage `base` compartido, un stage `dev`
+(con `ruff`/`pytest`, usado por `make test`/`make lint`/`make format*` y
+buildeado con `make docker-build-dev`) y el stage `production` (sin
+tooling de dev, target por defecto de `docker build`, el que usa Railway).
+
+El flujo recomendado para desarrollar es `make run`: el código se edita en
+el host con cualquier editor, pero la app corre dentro del contenedor,
+montado como volumen y con `DEBUG=true`, así el reloader de Dash levanta
+los cambios al instante sin reiniciar el contenedor. `make test`/`make
+lint`/`make format*` montan el mismo volumen sobre la imagen `dev`, así que
+siempre corren contra el código actual — pero ninguno de los dos reconstruye
+la imagen automáticamente: si cambiás `pyproject.toml`, corré de nuevo
+`make docker-build` / `make docker-build-dev`.
 
 ---
 

@@ -851,4 +851,5 @@ def update_box_plot(region, avocado_type, start_date, end_date, column, group_by
 if __name__ == "__main__":
     # Get port from environment variable for Railway deployment
     port = int(os.environ.get("PORT", 8050))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    debug = os.environ.get("DEBUG", "false").lower() == "true"
+    app.run(debug=debug, host="0.0.0.0", port=port)

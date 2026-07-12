@@ -10,16 +10,13 @@ python = ">=3.12,<3.13"
 pandas = "^2.3.2"
 dash = "^3.2.0"
 
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.15.21,<0.16.0"
+pytest = ">=9.1.1,<10.0.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[dependency-groups]
-dev = [
-    "ruff (>=0.15.21,<0.16.0)",
-    "pytest (>=9.1.1,<10.0.0)"
-]
 
 [tool.ruff]
 target-version = "py312"
