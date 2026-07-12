@@ -1,4 +1,7 @@
-from app import app, create_price_chart, data
+import pytest
+
+from app import app, create_price_chart, create_summary_panel, data
+from utils import calculate_price_change, find_region_extremes, format_number
 
 CONTROL_LABEL_IDS = [
     "region-filter-label",
@@ -93,3 +96,104 @@ def test_box_plot_groupby_options_have_tooltip_titles():
     assert dropdown is not None
     for option in dropdown.options:
         assert isinstance(option.get("title"), str) and option["title"].strip()
+
+
+def collect_text(component):
+    """Recursively collect all string children from a Dash component tree."""
+    texts = []
+    children = getattr(component, "children", None)
+    if isinstance(children, str):
+        texts.append(children)
+    elif isinstance(children, list):
+        for child in children:
+            if isinstance(child, str):
+                texts.append(child)
+            else:
+                texts.extend(collect_text(child))
+    elif children is not None:
+        texts.extend(collect_text(children))
+    return texts
+
+
+def test_summary_panel_shows_avg_price_and_total_volume():
+    region, avocado_type = "Albany", "organic"
+    start_date, end_date = "2015-01-01", "2015-12-31"
+    filtered = data.query(
+        "region == @region and type == @avocado_type"
+        " and Date >= @start_date and Date <= @end_date"
+    )
+    assert not filtered.empty
+
+    panel = create_summary_panel(filtered, region, avocado_type, start_date, end_date)
+    texts = collect_text(panel)
+
+    expected_price = f"${filtered['AveragePrice'].mean():.2f}"
+    expected_volume = format_number(filtered["Total Volume"].sum())
+    assert any(expected_price in t for t in texts)
+    assert any(expected_volume in t for t in texts)
+
+
+def test_summary_panel_shows_price_change_vs_previous_period():
+    region, avocado_type = "Albany", "organic"
+    start_date, end_date = "2016-01-01", "2016-12-31"
+    filtered = data.query(
+        "region == @region and type == @avocado_type"
+        " and Date >= @start_date and Date <= @end_date"
+    )
+    assert not filtered.empty
+
+    expected_change = calculate_price_change(
+        data, region, avocado_type, start_date, end_date
+    )
+    assert expected_change is not None
+
+    panel = create_summary_panel(filtered, region, avocado_type, start_date, end_date)
+    texts = collect_text(panel)
+    sign = "+" if expected_change >= 0 else ""
+    expected_text = f"{sign}{expected_change:.1f}%"
+    assert any(expected_text in t for t in texts)
+
+
+def test_summary_panel_highlights_best_worst_region():
+    region, avocado_type = "Albany", "organic"
+    start_date, end_date = "2015-01-01", "2015-12-31"
+    filtered = data.query(
+        "region == @region and type == @avocado_type"
+        " and Date >= @start_date and Date <= @end_date"
+    )
+    assert not filtered.empty
+
+    extremes = find_region_extremes(data, avocado_type, start_date, end_date)
+    assert extremes is not None
+
+    panel = create_summary_panel(filtered, region, avocado_type, start_date, end_date)
+    joined = " ".join(collect_text(panel))
+    assert extremes["best_region"] in joined
+    assert extremes["worst_region"] in joined
+
+
+def test_summary_panel_handles_no_data():
+    region, avocado_type = "Albany", "organic"
+    # A date range entirely outside the dataset yields zero rows.
+    start_date, end_date = "1999-01-01", "1999-12-31"
+    filtered = data.query(
+        "region == @region and type == @avocado_type"
+        " and Date >= @start_date and Date <= @end_date"
+    )
+    assert filtered.empty
+
+    panel = create_summary_panel(filtered, region, avocado_type, start_date, end_date)
+    assert panel.className == "summary-empty"
+    assert "no data" in panel.children.lower()
+
+
+@pytest.mark.parametrize(
+    "raw_value,formatted_value",
+    [
+        (1_500_000, "1.5M"),
+        (2_500, "2.5K"),
+        (850, "850"),
+    ],
+)
+def test_format_number_formats_for_readability(raw_value, formatted_value):
+    assert format_number(raw_value) == formatted_value
