@@ -8,6 +8,29 @@ body {
     background-color: #222222;
     height: 288px;
     padding: 16px 0 0 0;
+    position: relative;
+}
+
+.language-toggle {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+}
+
+.language-toggle label {
+    color: #CFCFCF;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    margin-right: 12px;
+}
+
+.language-toggle input[type="radio"] {
+    margin-right: 4px;
+    cursor: pointer;
+    accent-color: #17B897;
 }
 
 .header-emoji {

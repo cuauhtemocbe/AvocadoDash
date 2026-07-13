@@ -6,6 +6,7 @@ import os
 import pandas as pd
 from dash import Dash, Input, Output, State, dcc, html, no_update
 
+import translations
 from utils import (
     calculate_price_change,
     calculate_summary_stats,
@@ -41,15 +42,15 @@ def filter_data(regions, avocado_type, start_date, end_date):
     )
 
 
-EMPTY_REGION_MESSAGE = "Select at least one region to see data."
+EMPTY_REGION_MESSAGE = translations.t("empty.select_region", "en")
 
 
-def empty_state_figure(message):
+def empty_state_figure(message, lang="en"):
     """Empty Plotly figure with a centered annotation explaining why."""
     return {
         "data": [],
         "layout": {
-            "title": "No data available for selected filters",
+            "title": translations.t("empty.no_data_filters", lang),
             "annotations": [
                 {
                     "text": message,
@@ -104,44 +105,44 @@ numeric_columns = [
     "year",
 ]
 
-# Tooltip text for filter/control labels (rendered via the native HTML
-# `title` attribute — no extra dependency needed).
-CONTROL_TOOLTIPS = {
-    "region-filter-label": "Filter all charts to one or more US market regions.",
-    "type-filter-label": "Filter by avocado type: conventional or organic.",
-    "date-range-label": (
-        "Limit all charts to sales between the selected start and end dates."
-    ),
-    "x-axis-label": "Choose which metric to plot on the scatter chart's X axis.",
-    "y-axis-label": "Choose which metric to plot on the scatter chart's Y axis.",
-    "box-plot-column-label": "Choose which metric's distribution to visualize.",
-    "box-plot-groupby-label": (
-        "Choose how to group the box plot: by avocado type, region, or year."
-    ),
-}
-
-# Tooltip text for individual metric dropdown options (rendered via
-# dcc.Dropdown's per-option `title` key).
-COLUMN_TOOLTIPS = {
-    "AveragePrice": "Average price per single avocado (USD).",
-    "Total Volume": "Total number of avocados sold.",
-    "Total Bags": "Total bags sold, across all bag sizes.",
-    "Small Bags": "Bags sold in the small size category.",
-    "Large Bags": "Bags sold in the large size category.",
-    "XLarge Bags": "Bags sold in the extra-large size category.",
-    "year": "Calendar year of the sale.",
-}
-
-GROUPBY_TOOLTIPS = {
-    "type": "One box per avocado type (conventional vs organic).",
-    "region": "One box per US region.",
-    "year": "One box per calendar year.",
-}
-
 
 def info_icon(tooltip_text):
     """Small circular "i" badge that shows `tooltip_text` as a tooltip on hover."""
     return html.Span("i", className="info-icon", title=tooltip_text)
+
+
+def label_with_tooltip(text, tooltip_text):
+    """Menu-title `children` list: the label text plus its info-icon tooltip."""
+    return [text, info_icon(tooltip_text)]
+
+
+def build_type_options(lang):
+    return [
+        {"label": translations.type_label(avocado_type, lang), "value": avocado_type}
+        for avocado_type in avocado_types
+    ]
+
+
+def build_numeric_column_options(lang):
+    return [
+        {
+            "label": translations.column_label(col, lang),
+            "value": col,
+            "title": translations.column_tooltip(col, lang),
+        }
+        for col in numeric_columns
+    ]
+
+
+def build_groupby_options(lang):
+    return [
+        {
+            "label": translations.groupby_label(value, lang),
+            "value": value,
+            "title": translations.groupby_tooltip(value, lang),
+        }
+        for value in ("type", "region", "year")
+    ]
 
 
 external_stylesheets = [
@@ -156,15 +157,29 @@ app = Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = "Avocado Analytics"
 server = app.server  # This is needed for Railway deployment
 
+# Default language on load — the target audience is primarily Spanish-speaking.
+INITIAL_LANG = "es"
+
 app.layout = html.Div(
     children=[
         html.Div(
             children=[
+                dcc.RadioItems(
+                    id="language-toggle",
+                    options=[
+                        {"label": "ES", "value": "es"},
+                        {"label": "EN", "value": "en"},
+                    ],
+                    value=INITIAL_LANG,
+                    inline=True,
+                    className="language-toggle",
+                ),
                 html.P(children="🥑", className="header-emoji"),
                 html.H1(children="Avocado Analytics", className="header-title"),
                 html.P(
+                    id="header-subtitle",
                     children=[
-                        "by ",
+                        translations.t("header.subtitle_by", INITIAL_LANG),
                         html.A(
                             "@Kuautli",
                             href="https://github.com/cuauhtemocbe",
@@ -173,7 +188,7 @@ app.layout = html.Div(
                         ),
                         " | ",
                         html.A(
-                            "View on GitHub",
+                            translations.t("header.view_on_github", INITIAL_LANG),
                             href="https://github.com/cuauhtemocbe/AvocadoDash",
                             target="_blank",
                             className="header-link",
@@ -182,10 +197,8 @@ app.layout = html.Div(
                     className="header-subtitle",
                 ),
                 html.P(
-                    children=(
-                        "Analyze the behavior of avocado prices and the number"
-                        " of avocados sold in the US between 2015 and 2018"
-                    ),
+                    id="header-description",
+                    children=translations.t("header.description", INITIAL_LANG),
                     className="header-description",
                 ),
             ],
@@ -197,10 +210,10 @@ app.layout = html.Div(
                     children=[
                         html.Div(
                             id="region-filter-label",
-                            children=[
-                                "Region",
-                                info_icon(CONTROL_TOOLTIPS["region-filter-label"]),
-                            ],
+                            children=label_with_tooltip(
+                                translations.t("filters.region.label", INITIAL_LANG),
+                                translations.t("filters.region.tooltip", INITIAL_LANG),
+                            ),
                             className="menu-title",
                         ),
                         dcc.Dropdown(
@@ -212,7 +225,9 @@ app.layout = html.Div(
                             multi=True,
                             clearable=True,
                             searchable=True,
-                            placeholder="Select a region...",
+                            placeholder=translations.t(
+                                "filters.region.placeholder", INITIAL_LANG
+                            ),
                             className="dropdown",
                         ),
                     ]
@@ -221,21 +236,15 @@ app.layout = html.Div(
                     children=[
                         html.Div(
                             id="type-filter-label",
-                            children=[
-                                "Type",
-                                info_icon(CONTROL_TOOLTIPS["type-filter-label"]),
-                            ],
+                            children=label_with_tooltip(
+                                translations.t("filters.type.label", INITIAL_LANG),
+                                translations.t("filters.type.tooltip", INITIAL_LANG),
+                            ),
                             className="menu-title",
                         ),
                         dcc.Dropdown(
                             id="type-filter",
-                            options=[
-                                {
-                                    "label": avocado_type.title(),
-                                    "value": avocado_type,
-                                }
-                                for avocado_type in avocado_types
-                            ],
+                            options=build_type_options(INITIAL_LANG),
                             value="organic",
                             clearable=False,
                             searchable=False,
@@ -247,10 +256,14 @@ app.layout = html.Div(
                     children=[
                         html.Div(
                             id="date-range-label",
-                            children=[
-                                "Date Range",
-                                info_icon(CONTROL_TOOLTIPS["date-range-label"]),
-                            ],
+                            children=label_with_tooltip(
+                                translations.t(
+                                    "filters.date_range.label", INITIAL_LANG
+                                ),
+                                translations.t(
+                                    "filters.date_range.tooltip", INITIAL_LANG
+                                ),
+                            ),
                             className="menu-title",
                         ),
                         dcc.DatePickerRange(
@@ -268,7 +281,7 @@ app.layout = html.Div(
         html.Div(
             children=[
                 html.Button(
-                    "Download CSV",
+                    translations.t("download.button", INITIAL_LANG),
                     id="download-csv-button",
                     className="download-button",
                 ),
@@ -307,7 +320,8 @@ app.layout = html.Div(
         html.Div(
             children=[
                 html.H2(
-                    children="Scatter Plot Analysis",
+                    id="scatter-section-title",
+                    children=translations.t("sections.scatter_title", INITIAL_LANG),
                     style={
                         "text-align": "center",
                         "margin": "40px 0 20px 0",
@@ -321,22 +335,19 @@ app.layout = html.Div(
                             children=[
                                 html.Div(
                                     id="x-axis-label",
-                                    children=[
-                                        "X-Axis Column",
-                                        info_icon(CONTROL_TOOLTIPS["x-axis-label"]),
-                                    ],
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.x_axis.label", INITIAL_LANG
+                                        ),
+                                        translations.t(
+                                            "filters.x_axis.tooltip", INITIAL_LANG
+                                        ),
+                                    ),
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
                                     id="x-axis-dropdown",
-                                    options=[
-                                        {
-                                            "label": col.replace("_", " ").title(),
-                                            "value": col,
-                                            "title": COLUMN_TOOLTIPS[col],
-                                        }
-                                        for col in numeric_columns
-                                    ],
+                                    options=build_numeric_column_options(INITIAL_LANG),
                                     value="AveragePrice",
                                     clearable=False,
                                     className="dropdown",
@@ -348,22 +359,19 @@ app.layout = html.Div(
                             children=[
                                 html.Div(
                                     id="y-axis-label",
-                                    children=[
-                                        "Y-Axis Column",
-                                        info_icon(CONTROL_TOOLTIPS["y-axis-label"]),
-                                    ],
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.y_axis.label", INITIAL_LANG
+                                        ),
+                                        translations.t(
+                                            "filters.y_axis.tooltip", INITIAL_LANG
+                                        ),
+                                    ),
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
                                     id="y-axis-dropdown",
-                                    options=[
-                                        {
-                                            "label": col.replace("_", " ").title(),
-                                            "value": col,
-                                            "title": COLUMN_TOOLTIPS[col],
-                                        }
-                                        for col in numeric_columns
-                                    ],
+                                    options=build_numeric_column_options(INITIAL_LANG),
                                     value="Total Volume",
                                     clearable=False,
                                     className="dropdown",
@@ -395,7 +403,8 @@ app.layout = html.Div(
         html.Div(
             children=[
                 html.H2(
-                    children="Box Plot Analysis",
+                    id="box-plot-section-title",
+                    children=translations.t("sections.box_plot_title", INITIAL_LANG),
                     style={
                         "text-align": "center",
                         "margin": "40px 0 20px 0",
@@ -409,24 +418,21 @@ app.layout = html.Div(
                             children=[
                                 html.Div(
                                     id="box-plot-column-label",
-                                    children=[
-                                        "Column to Analyze",
-                                        info_icon(
-                                            CONTROL_TOOLTIPS["box-plot-column-label"]
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.box_plot_column.label",
+                                            INITIAL_LANG,
                                         ),
-                                    ],
+                                        translations.t(
+                                            "filters.box_plot_column.tooltip",
+                                            INITIAL_LANG,
+                                        ),
+                                    ),
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
                                     id="box-plot-column",
-                                    options=[
-                                        {
-                                            "label": col.replace("_", " ").title(),
-                                            "value": col,
-                                            "title": COLUMN_TOOLTIPS[col],
-                                        }
-                                        for col in numeric_columns
-                                    ],
+                                    options=build_numeric_column_options(INITIAL_LANG),
                                     value="AveragePrice",
                                     clearable=False,
                                     className="dropdown",
@@ -438,33 +444,21 @@ app.layout = html.Div(
                             children=[
                                 html.Div(
                                     id="box-plot-groupby-label",
-                                    children=[
-                                        "Group By",
-                                        info_icon(
-                                            CONTROL_TOOLTIPS["box-plot-groupby-label"]
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.box_plot_groupby.label",
+                                            INITIAL_LANG,
                                         ),
-                                    ],
+                                        translations.t(
+                                            "filters.box_plot_groupby.tooltip",
+                                            INITIAL_LANG,
+                                        ),
+                                    ),
                                     className="menu-title",
                                 ),
                                 dcc.Dropdown(
                                     id="box-plot-groupby",
-                                    options=[
-                                        {
-                                            "label": "Avocado Type",
-                                            "value": "type",
-                                            "title": GROUPBY_TOOLTIPS["type"],
-                                        },
-                                        {
-                                            "label": "Region",
-                                            "value": "region",
-                                            "title": GROUPBY_TOOLTIPS["region"],
-                                        },
-                                        {
-                                            "label": "Year",
-                                            "value": "year",
-                                            "title": GROUPBY_TOOLTIPS["year"],
-                                        },
-                                    ],
+                                    options=build_groupby_options(INITIAL_LANG),
                                     value="type",
                                     clearable=False,
                                     className="dropdown",
@@ -496,8 +490,9 @@ app.layout = html.Div(
         html.Div(
             children=[
                 html.P(
+                    id="footer-text",
                     children=[
-                        "Created by ",
+                        translations.t("footer.created_by", INITIAL_LANG),
                         html.A(
                             "@Kuautli",
                             href="https://github.com/cuauhtemocbe",
@@ -506,7 +501,7 @@ app.layout = html.Div(
                         ),
                         " | ",
                         html.A(
-                            "View on GitHub",
+                            translations.t("header.view_on_github", INITIAL_LANG),
                             href="https://github.com/cuauhtemocbe/AvocadoDash",
                             target="_blank",
                             className="footer-link",
@@ -532,11 +527,13 @@ def summary_stat_card(label, value, extra_class=""):
     )
 
 
-def create_summary_panel(filtered_data, regions, avocado_type, start_date, end_date):
+def create_summary_panel(
+    filtered_data, regions, avocado_type, start_date, end_date, lang="en"
+):
     """Build the summary panel's KPI cards for the current filter selection."""
     if filtered_data.empty:
         return html.Div(
-            "No data available for this selection.",
+            translations.t("empty.no_data_summary", lang),
             className="summary-empty",
         )
 
@@ -547,8 +544,14 @@ def create_summary_panel(filtered_data, regions, avocado_type, start_date, end_d
     extremes = find_region_extremes(data, avocado_type, start_date, end_date)
 
     cards = [
-        summary_stat_card("Average Price", f"${stats['avg_price']:.2f}"),
-        summary_stat_card("Total Volume", format_number(stats["total_volume"])),
+        summary_stat_card(
+            translations.column_label("AveragePrice", lang),
+            f"${stats['avg_price']:.2f}",
+        ),
+        summary_stat_card(
+            translations.column_label("Total Volume", lang),
+            format_number(stats["total_volume"]),
+        ),
     ]
 
     if price_change is not None:
@@ -556,7 +559,7 @@ def create_summary_panel(filtered_data, regions, avocado_type, start_date, end_d
         trend_class = "summary-stat-up" if price_change >= 0 else "summary-stat-down"
         cards.append(
             summary_stat_card(
-                "Price Change vs. Previous Period",
+                translations.t("summary.price_change", lang),
                 f"{sign}{price_change:.1f}%",
                 trend_class,
             )
@@ -565,13 +568,13 @@ def create_summary_panel(filtered_data, regions, avocado_type, start_date, end_d
     if extremes is not None:
         cards.append(
             summary_stat_card(
-                "Best Region (avg. price)",
+                translations.t("summary.best_region", lang),
                 f"{extremes['best_region']} (${extremes['best_price']:.2f})",
             )
         )
         cards.append(
             summary_stat_card(
-                "Worst Region (avg. price)",
+                translations.t("summary.worst_region", lang),
                 f"{extremes['worst_region']} (${extremes['worst_price']:.2f})",
             )
         )
@@ -579,12 +582,13 @@ def create_summary_panel(filtered_data, regions, avocado_type, start_date, end_d
     return html.Div(cards, className="summary-stats")
 
 
-def _region_traces(filtered_data, y_column, hover_label, hover_format):
+def _region_traces(filtered_data, y_column, hover_label, hover_format, lang="en"):
     """One line+marker trace per region present in `filtered_data`, colored
     in a fixed palette order by the current selection (see
     REGION_COLOR_PALETTE for why this isn't a fixed per-region color)."""
     traces = []
     selected_regions = sorted(filtered_data["region"].unique())
+    date_label = translations.t("common.date", lang)
     for i, region in enumerate(selected_regions):
         region_data = filtered_data[filtered_data["region"] == region]
         color = REGION_COLOR_PALETTE[i % len(REGION_COLOR_PALETTE)]
@@ -596,7 +600,7 @@ def _region_traces(filtered_data, y_column, hover_label, hover_format):
                 "mode": "lines+markers",
                 "name": region,
                 "hovertemplate": (
-                    f"<b>%{{fullData.name}}</b><br>Date: %{{x}}<br>"
+                    f"<b>%{{fullData.name}}</b><br>{date_label}: %{{x}}<br>"
                     f"{hover_label}: {hover_format}<extra></extra>"
                 ),
                 "line": {"width": 3, "color": color},
@@ -606,28 +610,31 @@ def _region_traces(filtered_data, y_column, hover_label, hover_format):
     return traces
 
 
-def create_price_chart(filtered_data):
+def create_price_chart(filtered_data, lang="en"):
     """Create the price chart, one line per region in `filtered_data`."""
-    traces = _region_traces(filtered_data, "AveragePrice", "Price", "$%{y:.2f}")
+    price_label = translations.t("common.price", lang)
+    traces = _region_traces(
+        filtered_data, "AveragePrice", price_label, "$%{y:.2f}", lang
+    )
     return {
         "data": traces,
         "layout": {
             "title": {
-                "text": "Average Price of Avocados",
+                "text": translations.t("charts.price.title", lang),
                 "x": 0.05,
                 "xanchor": "left",
                 "font": {"size": 20},
             },
             "xaxis": {
                 "fixedrange": True,
-                "title": "Date",
+                "title": translations.t("common.date", lang),
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
             "yaxis": {
                 "tickprefix": "$",
                 "fixedrange": True,
-                "title": "Price (USD)",
+                "title": translations.t("charts.price.yaxis", lang),
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
@@ -645,27 +652,30 @@ def create_price_chart(filtered_data):
     }
 
 
-def create_volume_chart(filtered_data):
+def create_volume_chart(filtered_data, lang="en"):
     """Create the volume chart, one line per region in `filtered_data`."""
-    traces = _region_traces(filtered_data, "Total Volume", "Volume", "%{y:,.0f}")
+    volume_label = translations.t("common.volume", lang)
+    traces = _region_traces(
+        filtered_data, "Total Volume", volume_label, "%{y:,.0f}", lang
+    )
     return {
         "data": traces,
         "layout": {
             "title": {
-                "text": "Avocados Sold (Volume)",
+                "text": translations.t("charts.volume.title", lang),
                 "x": 0.05,
                 "xanchor": "left",
                 "font": {"size": 20},
             },
             "xaxis": {
                 "fixedrange": True,
-                "title": "Date",
+                "title": translations.t("common.date", lang),
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
             "yaxis": {
                 "fixedrange": True,
-                "title": "Volume",
+                "title": volume_label,
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
@@ -683,7 +693,7 @@ def create_volume_chart(filtered_data):
     }
 
 
-def create_box_plot(filtered_data, column, group_by):
+def create_box_plot(filtered_data, column, group_by, lang="en"):
     """Create a box plot for the selected column grouped by the specified variable."""
     # Color mapping for different groups
     color_map = {"conventional": "#17B897", "organic": "#E12D39"}
@@ -698,7 +708,7 @@ def create_box_plot(filtered_data, column, group_by):
                 {
                     "y": type_data[column],
                     "type": "box",
-                    "name": avocado_type.title(),
+                    "name": translations.type_label(avocado_type, lang),
                     "marker": {"color": color_map.get(avocado_type, "#17B897")},
                     "boxpoints": "outliers",
                     "jitter": 0.3,
@@ -716,7 +726,7 @@ def create_box_plot(filtered_data, column, group_by):
                         "y": type_data[column],
                         "x": type_data["region"],
                         "type": "box",
-                        "name": avocado_type.title(),
+                        "name": translations.type_label(avocado_type, lang),
                         "marker": {"color": color_map.get(avocado_type, "#17B897")},
                         "boxpoints": "outliers",
                     }
@@ -753,10 +763,10 @@ def create_box_plot(filtered_data, column, group_by):
 
     # Determine layout based on group_by
     if group_by == "region" and len(filtered_data["type"].unique()) > 1:
-        x_title = "Region"
+        x_title = translations.t("common.region", lang)
         show_legend = True
     else:
-        x_title = group_by.replace("_", " ").title()
+        x_title = translations.groupby_label(group_by, lang)
         show_legend = len(traces) > 1
 
     return {
@@ -764,8 +774,9 @@ def create_box_plot(filtered_data, column, group_by):
         "layout": {
             "title": {
                 "text": (
-                    f"{column.replace('_', ' ').title()} Distribution by "
-                    f"{group_by.replace('_', ' ').title()}"
+                    f"{translations.column_label(column, lang)} "
+                    f"{translations.t('charts.box_plot.distribution_by', lang)} "
+                    f"{translations.groupby_label(group_by, lang)}"
                 ),
                 "x": 0.5,
                 "xanchor": "center",
@@ -777,7 +788,7 @@ def create_box_plot(filtered_data, column, group_by):
                 "gridcolor": "lightgray",
             },
             "yaxis": {
-                "title": column.replace("_", " ").title(),
+                "title": translations.column_label(column, lang),
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
@@ -795,10 +806,14 @@ def create_box_plot(filtered_data, column, group_by):
     }
 
 
-def create_scatter_chart(filtered_data, x_col, y_col):
+def create_scatter_chart(filtered_data, x_col, y_col, lang="en"):
     """Create a scatter plot with selected columns."""
     # Create color mapping for avocado types
     color_map = {"conventional": "#17B897", "organic": "#E12D39"}
+    x_label = translations.column_label(x_col, lang)
+    y_label = translations.column_label(y_col, lang)
+    region_label = translations.t("common.region", lang)
+    date_label = translations.t("common.date", lang)
 
     traces = []
     for avocado_type in filtered_data["type"].unique():
@@ -809,7 +824,7 @@ def create_scatter_chart(filtered_data, x_col, y_col):
                 "y": type_data[y_col],
                 "mode": "markers",
                 "type": "scatter",
-                "name": avocado_type.title(),
+                "name": translations.type_label(avocado_type, lang),
                 "marker": {
                     "size": 8,
                     "color": color_map.get(avocado_type, "#17B897"),
@@ -818,10 +833,10 @@ def create_scatter_chart(filtered_data, x_col, y_col):
                 },
                 "hovertemplate": (
                     f"<b>%{{fullData.name}}</b><br>"
-                    f"{x_col.replace('_', ' ').title()}: %{{x}}<br>"
-                    f"{y_col.replace('_', ' ').title()}: %{{y}}<br>"
-                    f"Region: %{{customdata[0]}}<br>"
-                    f"Date: %{{customdata[1]}}<extra></extra>"
+                    f"{x_label}: %{{x}}<br>"
+                    f"{y_label}: %{{y}}<br>"
+                    f"{region_label}: %{{customdata[0]}}<br>"
+                    f"{date_label}: %{{customdata[1]}}<extra></extra>"
                 ),
                 "customdata": list(
                     zip(type_data["region"], type_data["Date"].dt.strftime("%Y-%m-%d"))
@@ -834,20 +849,19 @@ def create_scatter_chart(filtered_data, x_col, y_col):
         "layout": {
             "title": {
                 "text": (
-                    f"{x_col.replace('_', ' ').title()} vs "
-                    f"{y_col.replace('_', ' ').title()}"
+                    f"{x_label} {translations.t('charts.scatter.vs', lang)} {y_label}"
                 ),
                 "x": 0.5,
                 "xanchor": "center",
                 "font": {"size": 22},
             },
             "xaxis": {
-                "title": x_col.replace("_", " ").title(),
+                "title": x_label,
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
             "yaxis": {
-                "title": y_col.replace("_", " ").title(),
+                "title": y_label,
                 "showgrid": True,
                 "gridcolor": "lightgray",
             },
@@ -866,24 +880,130 @@ def create_scatter_chart(filtered_data, x_col, y_col):
 
 
 @app.callback(
+    Output("header-subtitle", "children"),
+    Output("header-description", "children"),
+    Output("footer-text", "children"),
+    Output("scatter-section-title", "children"),
+    Output("box-plot-section-title", "children"),
+    Output("region-filter-label", "children"),
+    Output("region-filter", "placeholder"),
+    Output("type-filter-label", "children"),
+    Output("type-filter", "options"),
+    Output("date-range-label", "children"),
+    Output("download-csv-button", "children"),
+    Output("x-axis-label", "children"),
+    Output("x-axis-dropdown", "options"),
+    Output("y-axis-label", "children"),
+    Output("y-axis-dropdown", "options"),
+    Output("box-plot-column-label", "children"),
+    Output("box-plot-column", "options"),
+    Output("box-plot-groupby-label", "children"),
+    Output("box-plot-groupby", "options"),
+    Input("language-toggle", "value"),
+)
+def update_ui_language(lang):
+    """Retranslate every static, filter-independent piece of text/labels in
+    the layout. Only `children`/`placeholder`/`options["label"|"title"]` are
+    touched — dropdown `value`s (and thus filtering/query logic) never
+    change here."""
+    view_on_github = translations.t("header.view_on_github", lang)
+    return (
+        [
+            translations.t("header.subtitle_by", lang),
+            html.A(
+                "@Kuautli",
+                href="https://github.com/cuauhtemocbe",
+                target="_blank",
+                className="header-link",
+            ),
+            " | ",
+            html.A(
+                view_on_github,
+                href="https://github.com/cuauhtemocbe/AvocadoDash",
+                target="_blank",
+                className="header-link",
+            ),
+        ],
+        translations.t("header.description", lang),
+        [
+            translations.t("footer.created_by", lang),
+            html.A(
+                "@Kuautli",
+                href="https://github.com/cuauhtemocbe",
+                target="_blank",
+                className="footer-link",
+            ),
+            " | ",
+            html.A(
+                view_on_github,
+                href="https://github.com/cuauhtemocbe/AvocadoDash",
+                target="_blank",
+                className="footer-link",
+            ),
+        ],
+        translations.t("sections.scatter_title", lang),
+        translations.t("sections.box_plot_title", lang),
+        label_with_tooltip(
+            translations.t("filters.region.label", lang),
+            translations.t("filters.region.tooltip", lang),
+        ),
+        translations.t("filters.region.placeholder", lang),
+        label_with_tooltip(
+            translations.t("filters.type.label", lang),
+            translations.t("filters.type.tooltip", lang),
+        ),
+        build_type_options(lang),
+        label_with_tooltip(
+            translations.t("filters.date_range.label", lang),
+            translations.t("filters.date_range.tooltip", lang),
+        ),
+        translations.t("download.button", lang),
+        label_with_tooltip(
+            translations.t("filters.x_axis.label", lang),
+            translations.t("filters.x_axis.tooltip", lang),
+        ),
+        build_numeric_column_options(lang),
+        label_with_tooltip(
+            translations.t("filters.y_axis.label", lang),
+            translations.t("filters.y_axis.tooltip", lang),
+        ),
+        build_numeric_column_options(lang),
+        label_with_tooltip(
+            translations.t("filters.box_plot_column.label", lang),
+            translations.t("filters.box_plot_column.tooltip", lang),
+        ),
+        build_numeric_column_options(lang),
+        label_with_tooltip(
+            translations.t("filters.box_plot_groupby.label", lang),
+            translations.t("filters.box_plot_groupby.tooltip", lang),
+        ),
+        build_groupby_options(lang),
+    )
+
+
+@app.callback(
     Output("summary-panel", "children"),
     Input("region-filter", "value"),
     Input("type-filter", "value"),
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
+    Input("language-toggle", "value"),
 )
-def update_summary_panel(regions, avocado_type, start_date, end_date):
+def update_summary_panel(regions, avocado_type, start_date, end_date, lang="en"):
     """Update the summary panel based on filter selections."""
     try:
         if not regions:
-            return html.Div(EMPTY_REGION_MESSAGE, className="summary-empty")
+            return html.Div(
+                translations.t("empty.select_region", lang), className="summary-empty"
+            )
         filtered_data = filter_data(regions, avocado_type, start_date, end_date)
         return create_summary_panel(
-            filtered_data, regions, avocado_type, start_date, end_date
+            filtered_data, regions, avocado_type, start_date, end_date, lang
         )
     except Exception as e:
         logger.error(f"Error in summary panel callback: {str(e)}", exc_info=True)
-        return html.Div(f"Error: {str(e)}", className="summary-empty")
+        error_prefix = translations.t("common.error_prefix", lang)
+        return html.Div(f"{error_prefix}: {str(e)}", className="summary-empty")
 
 
 @app.callback(
@@ -893,19 +1013,21 @@ def update_summary_panel(regions, avocado_type, start_date, end_date):
     Input("type-filter", "value"),
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
+    Input("language-toggle", "value"),
 )
-def update_download_controls(regions, avocado_type, start_date, end_date):
+def update_download_controls(regions, avocado_type, start_date, end_date, lang="en"):
     """Enable/disable the CSV download button based on filter selections."""
     try:
         if not regions:
-            return True, EMPTY_REGION_MESSAGE
+            return True, translations.t("empty.select_region", lang)
         filtered_data = filter_data(regions, avocado_type, start_date, end_date)
         if filtered_data.empty:
-            return True, "No data to export."
+            return True, translations.t("download.no_data", lang)
         return False, ""
     except Exception as e:
         logger.error(f"Error in download controls callback: {str(e)}", exc_info=True)
-        return True, f"Error: {str(e)}"
+        error_prefix = translations.t("common.error_prefix", lang)
+        return True, f"{error_prefix}: {str(e)}"
 
 
 @app.callback(
@@ -940,12 +1062,15 @@ def download_filtered_csv(n_clicks, regions, avocado_type, start_date, end_date)
     Input("type-filter", "value"),
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
+    Input("language-toggle", "value"),
 )
-def update_charts(regions, avocado_type, start_date, end_date):
+def update_charts(regions, avocado_type, start_date, end_date, lang="en"):
     """Update charts based on filter selections."""
     try:
         if not regions:
-            empty_fig = empty_state_figure(EMPTY_REGION_MESSAGE)
+            empty_fig = empty_state_figure(
+                translations.t("empty.select_region", lang), lang
+            )
             return empty_fig, empty_fig
 
         # Filter data based on selections
@@ -953,15 +1078,21 @@ def update_charts(regions, avocado_type, start_date, end_date):
 
         # Handle empty data case
         if filtered_data.empty:
-            empty_fig = empty_state_figure("Try adjusting your filters")
+            empty_fig = empty_state_figure(
+                translations.t("empty.try_adjusting", lang), lang
+            )
             return empty_fig, empty_fig
 
-        return create_price_chart(filtered_data), create_volume_chart(filtered_data)
+        return (
+            create_price_chart(filtered_data, lang),
+            create_volume_chart(filtered_data, lang),
+        )
 
     except Exception as e:
         logger.error(f"Error in callback: {str(e)}", exc_info=True)
         # Return empty figures on error
-        error_fig = {"data": [], "layout": {"title": f"Error: {str(e)}"}}
+        error_prefix = translations.t("common.error_prefix", lang)
+        error_fig = {"data": [], "layout": {"title": f"{error_prefix}: {str(e)}"}}
         return error_fig, error_fig
 
 
@@ -973,25 +1104,29 @@ def update_charts(regions, avocado_type, start_date, end_date):
     Input("date-range", "end_date"),
     Input("x-axis-dropdown", "value"),
     Input("y-axis-dropdown", "value"),
+    Input("language-toggle", "value"),
 )
-def update_scatter_chart(regions, avocado_type, start_date, end_date, x_col, y_col):
+def update_scatter_chart(
+    regions, avocado_type, start_date, end_date, x_col, y_col, lang="en"
+):
     """Update scatter chart based on filter selections and axis choices."""
     try:
         if not regions:
-            return empty_state_figure(EMPTY_REGION_MESSAGE)
+            return empty_state_figure(translations.t("empty.select_region", lang), lang)
 
         # Filter data based on selections
         filtered_data = filter_data(regions, avocado_type, start_date, end_date)
 
         # Handle empty data case
         if filtered_data.empty:
-            return empty_state_figure("Try adjusting your filters")
+            return empty_state_figure(translations.t("empty.try_adjusting", lang), lang)
 
-        return create_scatter_chart(filtered_data, x_col, y_col)
+        return create_scatter_chart(filtered_data, x_col, y_col, lang)
 
     except Exception as e:
         logger.error(f"Error in scatter chart callback: {str(e)}", exc_info=True)
-        return {"data": [], "layout": {"title": f"Error: {str(e)}"}}
+        error_prefix = translations.t("common.error_prefix", lang)
+        return {"data": [], "layout": {"title": f"{error_prefix}: {str(e)}"}}
 
 
 @app.callback(
@@ -1002,8 +1137,11 @@ def update_scatter_chart(regions, avocado_type, start_date, end_date, x_col, y_c
     Input("date-range", "end_date"),
     Input("box-plot-column", "value"),
     Input("box-plot-groupby", "value"),
+    Input("language-toggle", "value"),
 )
-def update_box_plot(regions, avocado_type, start_date, end_date, column, group_by):
+def update_box_plot(
+    regions, avocado_type, start_date, end_date, column, group_by, lang="en"
+):
     """Update box plot based on filter selections and grouping choice."""
     try:
         # For box plots, we might want to show data across different groups
@@ -1016,7 +1154,9 @@ def update_box_plot(regions, avocado_type, start_date, end_date, column, group_b
             )
         else:
             if not regions:
-                return empty_state_figure(EMPTY_REGION_MESSAGE)
+                return empty_state_figure(
+                    translations.t("empty.select_region", lang), lang
+                )
             if group_by == "type":
                 # Show both types, but filter by regions and date
                 filtered_data = data.query(
@@ -1028,13 +1168,14 @@ def update_box_plot(regions, avocado_type, start_date, end_date, column, group_b
 
         # Handle empty data case
         if filtered_data.empty:
-            return empty_state_figure("Try adjusting your filters")
+            return empty_state_figure(translations.t("empty.try_adjusting", lang), lang)
 
-        return create_box_plot(filtered_data, column, group_by)
+        return create_box_plot(filtered_data, column, group_by, lang)
 
     except Exception as e:
         logger.error(f"Error in box plot callback: {str(e)}", exc_info=True)
-        return {"data": [], "layout": {"title": f"Error: {str(e)}"}}
+        error_prefix = translations.t("common.error_prefix", lang)
+        return {"data": [], "layout": {"title": f"{error_prefix}: {str(e)}"}}
 
 
 if __name__ == "__main__":

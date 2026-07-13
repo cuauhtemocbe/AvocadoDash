@@ -23,7 +23,9 @@ from app import (
     update_download_controls,
     update_scatter_chart,
     update_summary_panel,
+    update_ui_language,
 )
+from translations import column_label, t
 from utils import calculate_price_change, find_region_extremes, format_number
 
 CONTROL_LABEL_IDS = [
@@ -515,7 +517,7 @@ def test_update_scatter_chart_returns_valid_figure_for_matching_data():
     )
 
     assert figure["data"]
-    assert figure["layout"]["title"]["text"] == "Averageprice vs Total Volume"
+    assert figure["layout"]["title"]["text"] == "Average Price vs Total Volume"
 
 
 def test_update_scatter_chart_pools_data_from_multiple_regions():
@@ -764,3 +766,160 @@ def test_no_print_statements_remain_in_app_source():
     app_source = Path(__file__).parent.parent.joinpath("src", "app.py").read_text()
 
     assert "print(" not in app_source
+
+
+def test_update_ui_language_translates_static_text_to_spanish():
+    (
+        header_subtitle,
+        header_description,
+        footer_text,
+        scatter_title,
+        box_plot_title,
+        region_label,
+        region_placeholder,
+        type_label_children,
+        type_options,
+        date_range_label,
+        download_button,
+        x_axis_label,
+        x_axis_options,
+        y_axis_label,
+        y_axis_options,
+        box_plot_column_label,
+        box_plot_column_options,
+        box_plot_groupby_label,
+        box_plot_groupby_options,
+    ) = update_ui_language("es")
+
+    assert header_subtitle[0] == t("header.subtitle_by", "es")
+    assert header_description == t("header.description", "es")
+    assert footer_text[0] == t("footer.created_by", "es")
+    assert scatter_title == t("sections.scatter_title", "es")
+    assert box_plot_title == t("sections.box_plot_title", "es")
+    assert region_label[0] == t("filters.region.label", "es")
+    assert region_placeholder == t("filters.region.placeholder", "es")
+    assert type_label_children[0] == t("filters.type.label", "es")
+    assert date_range_label[0] == t("filters.date_range.label", "es")
+    assert download_button == t("download.button", "es")
+    assert x_axis_label[0] == t("filters.x_axis.label", "es")
+    assert y_axis_label[0] == t("filters.y_axis.label", "es")
+    assert box_plot_column_label[0] == t("filters.box_plot_column.label", "es")
+    assert box_plot_groupby_label[0] == t("filters.box_plot_groupby.label", "es")
+
+    assert {opt["value"] for opt in type_options} == {"conventional", "organic"}
+    assert {opt["label"] for opt in type_options} == {"Convencional", "Orgánico"}
+    assert {opt["value"] for opt in box_plot_groupby_options} == {
+        "type",
+        "region",
+        "year",
+    }
+    assert [opt["value"] for opt in x_axis_options] == [
+        opt["value"] for opt in y_axis_options
+    ]
+    assert [opt["value"] for opt in x_axis_options] == [
+        opt["value"] for opt in box_plot_column_options
+    ]
+
+
+def test_update_ui_language_dropdown_values_unchanged_between_languages():
+    es_result = update_ui_language("es")
+    en_result = update_ui_language("en")
+
+    es_type_options, en_type_options = es_result[8], en_result[8]
+    assert [opt["value"] for opt in es_type_options] == [
+        opt["value"] for opt in en_type_options
+    ]
+
+    es_numeric_options, en_numeric_options = es_result[12], en_result[12]
+    assert [opt["value"] for opt in es_numeric_options] == [
+        opt["value"] for opt in en_numeric_options
+    ]
+
+    es_groupby_options, en_groupby_options = es_result[18], en_result[18]
+    assert [opt["value"] for opt in es_groupby_options] == [
+        opt["value"] for opt in en_groupby_options
+    ]
+
+
+def test_create_price_chart_spanish_translates_titles_and_axis_labels():
+    filtered = filter_data(["Albany"], "organic", "2015-01-01", "2015-12-31")
+
+    figure = create_price_chart(filtered, lang="es")
+
+    assert figure["layout"]["title"]["text"] == t("charts.price.title", "es")
+    assert figure["layout"]["xaxis"]["title"] == t("common.date", "es")
+    assert figure["layout"]["yaxis"]["title"] == t("charts.price.yaxis", "es")
+
+
+def test_create_volume_chart_spanish_translates_titles_and_axis_labels():
+    filtered = data.query("region == 'Albany' and type == 'organic'").head(50)
+
+    figure = create_volume_chart(filtered, lang="es")
+
+    assert figure["layout"]["title"]["text"] == t("charts.volume.title", "es")
+    assert figure["layout"]["yaxis"]["title"] == t("common.volume", "es")
+
+
+def test_create_scatter_chart_spanish_translates_titles_and_axis_labels():
+    filtered = data.query("region == 'Albany'").head(50)
+
+    figure = create_scatter_chart(filtered, "AveragePrice", "Total Volume", lang="es")
+
+    x_label = column_label("AveragePrice", "es")
+    y_label = column_label("Total Volume", "es")
+    assert figure["layout"]["title"]["text"] == f"{x_label} vs {y_label}"
+    assert figure["layout"]["xaxis"]["title"] == x_label
+    assert figure["layout"]["yaxis"]["title"] == y_label
+
+
+def test_create_box_plot_region_grouping_spanish_xaxis_title():
+    filtered = data.query("Date >= '2015-01-01' and Date <= '2015-01-31'")
+    assert filtered["type"].nunique() == 2
+
+    figure = create_box_plot(filtered, "AveragePrice", "region", lang="es")
+
+    assert figure["layout"]["xaxis"]["title"] == t("common.region", "es")
+    assert {trace["name"] for trace in figure["data"]} == {"Convencional", "Orgánico"}
+
+
+def test_create_summary_panel_spanish_translates_card_labels():
+    regions, avocado_type = ["Albany"], "organic"
+    start_date, end_date = "2015-01-01", "2015-12-31"
+    filtered = filter_data(regions, avocado_type, start_date, end_date)
+
+    panel = create_summary_panel(
+        filtered, regions, avocado_type, start_date, end_date, lang="es"
+    )
+    texts = collect_text(panel)
+
+    assert any(column_label("AveragePrice", "es") in text for text in texts)
+    assert any(column_label("Total Volume", "es") in text for text in texts)
+
+
+def test_update_charts_returns_spanish_empty_state_message():
+    price_fig, volume_fig = update_charts(
+        [], "organic", "2015-01-01", "2015-12-31", lang="es"
+    )
+
+    price_text = price_fig["layout"]["annotations"][0]["text"]
+    assert price_text == t("empty.select_region", "es")
+
+
+def test_update_summary_panel_callback_handles_exception_in_spanish(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.filter_data", side_effect=RuntimeError("boom")):
+            panel = update_summary_panel(
+                ["Albany"], "organic", "2015-01-01", "2015-12-31", lang="es"
+            )
+
+    assert panel.children.startswith(t("common.error_prefix", "es"))
+    assert "boom" in panel.children.lower()
+
+
+def test_update_download_controls_spanish_no_data_message():
+    disabled, status = update_download_controls(
+        ["Albany"], "organic", "1999-01-01", "1999-12-31", lang="es"
+    )
+
+    assert disabled is True
+    assert status == t("download.no_data", "es")
