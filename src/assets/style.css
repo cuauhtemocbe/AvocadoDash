@@ -10,6 +10,12 @@
     --font-mono: "IBM Plex Mono", monospace;
 }
 
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
 body {
     font-family: var(--font-body);
     margin: 0;
@@ -113,6 +119,7 @@ body {
 }
 
 .menu > div {
+    flex: 1 1 220px;
     padding: 0 32px;
     border-left: 1px solid var(--pit);
 }
@@ -132,6 +139,7 @@ body {
     }
 
     .menu > div {
+        flex: none;
         border-left: none;
         width: 100%;
     }
