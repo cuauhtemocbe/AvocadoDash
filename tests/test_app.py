@@ -9,6 +9,7 @@ from dash import dcc, no_update
 
 from app import (
     EMPTY_REGION_MESSAGE,
+    REGION_COLOR_PALETTE,
     app,
     create_box_plot,
     create_price_chart,
@@ -436,6 +437,65 @@ def test_create_box_plot_produces_one_trace_per_group(
 
     assert len(figure["data"]) == expected_group_count
     assert all(trace["type"] == "box" for trace in figure["data"])
+
+
+CHART_BUILDERS_WITH_FILTERED_DATA = [
+    lambda filtered: create_price_chart(filtered),
+    lambda filtered: create_volume_chart(filtered),
+    lambda filtered: create_box_plot(filtered, "AveragePrice", "type"),
+    lambda filtered: create_scatter_chart(filtered, "AveragePrice", "Total Volume"),
+]
+
+
+@pytest.mark.parametrize("build_chart", CHART_BUILDERS_WITH_FILTERED_DATA)
+def test_chart_backgrounds_use_the_parchment_token(build_chart):
+    filtered = data.query("region == 'Albany'").head(50)
+
+    figure = build_chart(filtered)
+
+    assert figure["layout"]["plot_bgcolor"] == "#F6F1E4"
+    assert figure["layout"]["paper_bgcolor"] == "#F6F1E4"
+
+
+def test_create_box_plot_uses_the_new_type_color_map():
+    filtered = data.query(
+        "region == 'Albany' and Date >= '2015-01-01' and Date <= '2015-12-31'"
+    )
+    assert set(filtered["type"].unique()) == {"conventional", "organic"}
+
+    figure = create_box_plot(filtered, "AveragePrice", "type")
+
+    colors_by_name = {
+        trace["name"]: trace["marker"]["color"] for trace in figure["data"]
+    }
+    assert colors_by_name["Conventional"] == "#7C8F3E"
+    assert colors_by_name["Organic"] == "#B4432E"
+
+
+def test_create_scatter_chart_uses_the_new_type_color_map():
+    filtered = data.query(
+        "region == 'Albany' and Date >= '2015-01-01' and Date <= '2015-12-31'"
+    )
+    assert set(filtered["type"].unique()) == {"conventional", "organic"}
+
+    figure = create_scatter_chart(filtered, "AveragePrice", "Total Volume")
+
+    colors_by_name = {
+        trace["name"]: trace["marker"]["color"] for trace in figure["data"]
+    }
+    assert colors_by_name["Conventional"] == "#7C8F3E"
+    assert colors_by_name["Organic"] == "#B4432E"
+
+
+def test_region_line_palette_is_unchanged_by_the_chart_chrome_recolor():
+    filtered = data.query(
+        "region in ['Albany', 'Chicago', 'Houston'] and type == 'organic'"
+    )
+
+    figure = create_price_chart(filtered)
+
+    trace_colors = {trace["line"]["color"] for trace in figure["data"]}
+    assert trace_colors <= set(REGION_COLOR_PALETTE)
 
 
 def test_update_charts_shows_one_line_per_selected_region():

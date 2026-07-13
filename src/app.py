@@ -94,6 +94,13 @@ REGION_COLOR_PALETTE = [
     "#eb6834",  # orange
 ]
 
+# Chart chrome — same design tokens as style.css, duplicated here because
+# Plotly figure dicts render via JS/canvas and can't reference CSS custom
+# properties.
+CHART_BG = "#F6F1E4"  # --parchment
+CHART_GRIDCOLOR = "#D8CBAE"  # muted parchment-adjacent tone
+TYPE_COLOR_MAP = {"conventional": "#7C8F3E", "organic": "#B4432E"}  # --flesh / --bruise
+
 # Define numeric columns for scatter plot
 numeric_columns = [
     "AveragePrice",
@@ -659,17 +666,17 @@ def create_price_chart(filtered_data, lang="en"):
                 "fixedrange": True,
                 "title": translations.t("common.date", lang),
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
             "yaxis": {
                 "tickprefix": "$",
                 "fixedrange": True,
                 "title": translations.t("charts.price.yaxis", lang),
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
-            "plot_bgcolor": "white",
-            "paper_bgcolor": "white",
+            "plot_bgcolor": CHART_BG,
+            "paper_bgcolor": CHART_BG,
             "showlegend": len(traces) > 1,
             "legend": {
                 "x": 1.02,
@@ -701,16 +708,16 @@ def create_volume_chart(filtered_data, lang="en"):
                 "fixedrange": True,
                 "title": translations.t("common.date", lang),
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
             "yaxis": {
                 "fixedrange": True,
                 "title": volume_label,
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
-            "plot_bgcolor": "white",
-            "paper_bgcolor": "white",
+            "plot_bgcolor": CHART_BG,
+            "paper_bgcolor": CHART_BG,
             "showlegend": len(traces) > 1,
             "legend": {
                 "x": 1.02,
@@ -726,7 +733,7 @@ def create_volume_chart(filtered_data, lang="en"):
 def create_box_plot(filtered_data, column, group_by, lang="en"):
     """Create a box plot for the selected column grouped by the specified variable."""
     # Color mapping for different groups
-    color_map = {"conventional": "#17B897", "organic": "#E12D39"}
+    color_map = TYPE_COLOR_MAP
 
     traces = []
 
@@ -815,15 +822,15 @@ def create_box_plot(filtered_data, column, group_by, lang="en"):
             "xaxis": {
                 "title": x_title,
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
             "yaxis": {
                 "title": translations.column_label(column, lang),
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
-            "plot_bgcolor": "white",
-            "paper_bgcolor": "white",
+            "plot_bgcolor": CHART_BG,
+            "paper_bgcolor": CHART_BG,
             "showlegend": show_legend,
             "legend": {
                 "x": 1.02,
@@ -839,7 +846,7 @@ def create_box_plot(filtered_data, column, group_by, lang="en"):
 def create_scatter_chart(filtered_data, x_col, y_col, lang="en"):
     """Create a scatter plot with selected columns."""
     # Create color mapping for avocado types
-    color_map = {"conventional": "#17B897", "organic": "#E12D39"}
+    color_map = TYPE_COLOR_MAP
     x_label = translations.column_label(x_col, lang)
     y_label = translations.column_label(y_col, lang)
     region_label = translations.t("common.region", lang)
@@ -888,15 +895,15 @@ def create_scatter_chart(filtered_data, x_col, y_col, lang="en"):
             "xaxis": {
                 "title": x_label,
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
             "yaxis": {
                 "title": y_label,
                 "showgrid": True,
-                "gridcolor": "lightgray",
+                "gridcolor": CHART_GRIDCOLOR,
             },
-            "plot_bgcolor": "white",
-            "paper_bgcolor": "white",
+            "plot_bgcolor": CHART_BG,
+            "paper_bgcolor": CHART_BG,
             "hovermode": "closest",
             "legend": {
                 "x": 1.02,
