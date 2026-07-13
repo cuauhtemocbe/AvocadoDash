@@ -21,7 +21,8 @@ Construido con **Python Dash**, incluye múltiples tipos de visualizaciones para
 - **🔍 Filtros Avanzados** – Filtra por región, tipo de aguacate (convencional/orgánico) y rango de fechas
 - **📈 Análisis con Diagramas de Dispersión** – Explora relaciones entre variables con ejes configurables
 - **📦 Gráficas de Caja (Boxplots)** – Compara distribuciones por tipo, región o año
-- **🎨 Diseño Responsivo** – Interfaz moderna y limpia con estilo personalizado
+- **🎨 Identidad Visual Propia** – Paleta, tipografía (Fraunces/Inter/IBM Plex Mono) y un ícono de marca inspirados en el corte transversal del aguacate mismo, no una plantilla genérica
+- **📱 Diseño Responsivo** – Se adapta a pantallas angostas sin desbordes horizontales
 - **⚡ Actualizaciones en Tiempo Real** – Todos los gráficos se actualizan dinámicamente según los filtros
 
 ---
