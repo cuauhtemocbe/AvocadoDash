@@ -106,6 +106,29 @@ numeric_columns = [
 ]
 
 
+def cross_section_mark():
+    """The Cross-Section Mark: concentric rings echoing the avocado's
+    skin/flesh/pit layering — the app's signature element, replacing the
+    generic 🥑 emoji as the header brand mark."""
+    return html.Div(
+        html.Img(
+            src=(
+                "data:image/svg+xml;utf8,"
+                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'>"
+                "<circle cx='24' cy='24' r='22' fill='%231F1710' "
+                "stroke='%23EDE6D6' stroke-width='1' stroke-opacity='0.3'/>"
+                "<circle cx='24' cy='24' r='16' fill='%237C8F3E'/>"
+                "<circle cx='24' cy='24' r='7' fill='%238B5A2B'/>"
+                "</svg>"
+            ),
+            width="48",
+            height="48",
+            alt="",
+        ),
+        className="header-mark",
+    )
+
+
 def info_icon(tooltip_text):
     """Small circular "i" badge that shows `tooltip_text` as a tooltip on hover."""
     return html.Span("i", className="info-icon", title=tooltip_text)
@@ -178,7 +201,7 @@ app.layout = html.Div(
                     inline=True,
                     className="language-toggle",
                 ),
-                html.P(children="🥑", className="header-emoji"),
+                cross_section_mark(),
                 html.H1(children="Avocado Analytics", className="header-title"),
                 html.P(
                     id="header-subtitle",
