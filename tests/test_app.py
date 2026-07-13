@@ -20,6 +20,7 @@ from app import (
     download_filtered_csv,
     external_stylesheets,
     filter_data,
+    summary_stat_card,
     update_box_plot,
     update_charts,
     update_download_controls,
@@ -353,6 +354,27 @@ def test_summary_panel_handles_no_data():
     panel = create_summary_panel(filtered, regions, avocado_type, start_date, end_date)
     assert panel.className == "summary-empty"
     assert "no data" in panel.children.lower()
+
+
+def test_summary_stat_card_positive_trend_shows_up_glyph():
+    card = summary_stat_card("Price change", "+3.2%", "summary-stat-up")
+
+    value_div = card.children[1]
+    assert value_div.children.startswith("▲")
+
+
+def test_summary_stat_card_negative_trend_shows_down_glyph():
+    card = summary_stat_card("Price change", "-1.5%", "summary-stat-down")
+
+    value_div = card.children[1]
+    assert value_div.children.startswith("▼")
+
+
+def test_summary_stat_card_without_trend_class_has_no_glyph_prefix():
+    card = summary_stat_card("Avg. Price", "$1.23")
+
+    value_div = card.children[1]
+    assert value_div.children == "$1.23"
 
 
 def test_update_summary_panel_shows_message_when_no_regions_selected():

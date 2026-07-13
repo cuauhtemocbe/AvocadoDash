@@ -553,12 +553,21 @@ app.layout = html.Div(
 )
 
 
+TREND_GLYPHS = {"summary-stat-up": "▲ ", "summary-stat-down": "▼ "}
+
+
 def summary_stat_card(label, value, extra_class=""):
-    """A single KPI card for the summary panel."""
+    """A single KPI card for the summary panel. A `summary-stat-up`/
+    `summary-stat-down` extra_class also prefixes `value` with a ▲/▼ glyph,
+    so trend direction is never communicated by color alone."""
+    glyph = TREND_GLYPHS.get(extra_class, "")
     return html.Div(
         children=[
             html.Div(label, className="summary-stat-label"),
-            html.Div(value, className=f"summary-stat-value {extra_class}".strip()),
+            html.Div(
+                f"{glyph}{value}",
+                className=f"summary-stat-value {extra_class}".strip(),
+            ),
         ],
         className="summary-stat",
     )

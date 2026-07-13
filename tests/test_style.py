@@ -120,3 +120,12 @@ def test_menu_stacks_vertically_below_768px():
     media_body = media_match.group(1)
     menu_rule_in_media = extract_rule(".menu" + media_body, ".menu")
     assert declared_value(menu_rule_in_media, "flex-direction") == "column"
+
+
+def test_summary_stat_value_uses_mono_font_with_fallback():
+    css = read_css()
+    tokens = extract_root_tokens(css)
+    rule = extract_rule(css, ".summary-stat-value")
+    resolved = resolve(declared_value(rule, "font-family"), tokens)
+    assert "IBM Plex Mono" in resolved
+    assert "monospace" in resolved
