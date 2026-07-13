@@ -1,6 +1,6 @@
 ---
 title: Structured Error Logging in Callbacks
-status: approved
+status: completed
 created: 2026-07-12
 updated: 2026-07-12
 issue: #8
