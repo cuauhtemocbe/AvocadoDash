@@ -1,4 +1,6 @@
 import io
+import logging
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -332,12 +334,18 @@ def test_update_summary_panel_shows_message_when_no_regions_selected():
     assert panel.children == EMPTY_REGION_MESSAGE
 
 
-def test_update_summary_panel_callback_handles_exception_without_crashing():
-    with patch("app.filter_data", side_effect=RuntimeError("boom")):
-        panel = update_summary_panel(["Albany"], "organic", "2015-01-01", "2015-12-31")
+def test_update_summary_panel_callback_handles_exception_without_crashing(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.filter_data", side_effect=RuntimeError("boom")):
+            panel = update_summary_panel(
+                ["Albany"], "organic", "2015-01-01", "2015-12-31"
+            )
 
     assert panel.className == "summary-empty"
     assert "boom" in panel.children.lower()
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.ERROR
+    assert caplog.records[0].exc_info is not None
 
 
 @pytest.mark.parametrize(
@@ -454,16 +462,20 @@ def test_update_box_plot_groups_by_type_regardless_of_type_filter():
     assert trace_names == {"Conventional", "Organic"}
 
 
-def test_update_charts_callback_handles_exception_without_crashing():
-    with patch("app.create_price_chart", side_effect=RuntimeError("boom")):
-        price_fig, volume_fig = update_charts(
-            ["Albany"], "organic", "2015-01-01", "2015-12-31"
-        )
+def test_update_charts_callback_handles_exception_without_crashing(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.create_price_chart", side_effect=RuntimeError("boom")):
+            price_fig, volume_fig = update_charts(
+                ["Albany"], "organic", "2015-01-01", "2015-12-31"
+            )
 
     assert price_fig["data"] == []
     assert volume_fig["data"] == []
     assert "error" in price_fig["layout"]["title"].lower()
     assert "boom" in price_fig["layout"]["title"]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.ERROR
+    assert caplog.records[0].exc_info is not None
 
 
 def test_create_box_plot_region_grouping_with_multiple_types_uses_one_trace_per_type():
@@ -544,19 +556,23 @@ def test_update_scatter_chart_returns_region_specific_message_when_no_regions():
     assert figure["layout"]["annotations"][0]["text"] == EMPTY_REGION_MESSAGE
 
 
-def test_update_scatter_chart_callback_handles_exception_without_crashing():
-    with patch("app.create_scatter_chart", side_effect=RuntimeError("boom")):
-        figure = update_scatter_chart(
-            ["Albany"],
-            "organic",
-            "2015-01-01",
-            "2015-12-31",
-            "AveragePrice",
-            "Total Volume",
-        )
+def test_update_scatter_chart_callback_handles_exception_without_crashing(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.create_scatter_chart", side_effect=RuntimeError("boom")):
+            figure = update_scatter_chart(
+                ["Albany"],
+                "organic",
+                "2015-01-01",
+                "2015-12-31",
+                "AveragePrice",
+                "Total Volume",
+            )
 
     assert figure["data"] == []
     assert "error" in figure["layout"]["title"].lower()
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.ERROR
+    assert caplog.records[0].exc_info is not None
 
 
 @pytest.mark.parametrize(
@@ -622,14 +638,23 @@ def test_update_box_plot_returns_empty_state_for_no_matching_data():
     assert "no data available" in figure["layout"]["title"].lower()
 
 
-def test_update_box_plot_callback_handles_exception_without_crashing():
-    with patch("app.create_box_plot", side_effect=RuntimeError("boom")):
-        figure = update_box_plot(
-            ["Albany"], "organic", "2015-01-01", "2015-12-31", "AveragePrice", "year"
-        )
+def test_update_box_plot_callback_handles_exception_without_crashing(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.create_box_plot", side_effect=RuntimeError("boom")):
+            figure = update_box_plot(
+                ["Albany"],
+                "organic",
+                "2015-01-01",
+                "2015-12-31",
+                "AveragePrice",
+                "year",
+            )
 
     assert figure["data"] == []
     assert "error" in figure["layout"]["title"].lower()
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.ERROR
+    assert caplog.records[0].exc_info is not None
 
 
 def test_download_button_and_dcc_download_exist_in_layout():
@@ -681,13 +706,17 @@ def test_download_filtered_csv_returns_no_update_when_no_regions_selected():
     assert result is no_update
 
 
-def test_download_filtered_csv_callback_handles_exception_without_crashing():
-    with patch("app.dcc.send_data_frame", side_effect=RuntimeError("boom")):
-        result = download_filtered_csv(
-            1, ["Albany"], "organic", "2015-01-01", "2015-12-31"
-        )
+def test_download_filtered_csv_callback_handles_exception_without_crashing(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.dcc.send_data_frame", side_effect=RuntimeError("boom")):
+            result = download_filtered_csv(
+                1, ["Albany"], "organic", "2015-01-01", "2015-12-31"
+            )
 
     assert result is no_update
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.ERROR
+    assert caplog.records[0].exc_info is not None
 
 
 def test_update_download_controls_disables_button_when_no_data():
@@ -717,11 +746,21 @@ def test_update_download_controls_disables_button_when_no_regions_selected():
     assert status == EMPTY_REGION_MESSAGE
 
 
-def test_update_download_controls_callback_handles_exception_without_crashing():
-    with patch("app.filter_data", side_effect=RuntimeError("boom")):
-        disabled, status = update_download_controls(
-            ["Albany"], "organic", "2015-01-01", "2015-12-31"
-        )
+def test_update_download_controls_callback_handles_exception_without_crashing(caplog):
+    with caplog.at_level(logging.ERROR):
+        with patch("app.filter_data", side_effect=RuntimeError("boom")):
+            disabled, status = update_download_controls(
+                ["Albany"], "organic", "2015-01-01", "2015-12-31"
+            )
 
     assert disabled is True
     assert status != ""
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.ERROR
+    assert caplog.records[0].exc_info is not None
+
+
+def test_no_print_statements_remain_in_app_source():
+    app_source = Path(__file__).parent.parent.joinpath("src", "app.py").read_text()
+
+    assert "print(" not in app_source

@@ -1,5 +1,6 @@
 # app.py
 
+import logging
 import os
 
 import pandas as pd
@@ -11,6 +12,8 @@ from utils import (
     find_region_extremes,
     format_number,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def load_data():
@@ -879,7 +882,7 @@ def update_summary_panel(regions, avocado_type, start_date, end_date):
             filtered_data, regions, avocado_type, start_date, end_date
         )
     except Exception as e:
-        print(f"Error in summary panel callback: {str(e)}")
+        logger.error(f"Error in summary panel callback: {str(e)}", exc_info=True)
         return html.Div(f"Error: {str(e)}", className="summary-empty")
 
 
@@ -901,7 +904,7 @@ def update_download_controls(regions, avocado_type, start_date, end_date):
             return True, "No data to export."
         return False, ""
     except Exception as e:
-        print(f"Error in download controls callback: {str(e)}")
+        logger.error(f"Error in download controls callback: {str(e)}", exc_info=True)
         return True, f"Error: {str(e)}"
 
 
@@ -926,7 +929,7 @@ def download_filtered_csv(n_clicks, regions, avocado_type, start_date, end_date)
             filtered_data.to_csv, "avocado_filtered.csv", index=False
         )
     except Exception as e:
-        print(f"Error in download callback: {str(e)}")
+        logger.error(f"Error in download callback: {str(e)}", exc_info=True)
         return no_update
 
 
@@ -956,7 +959,7 @@ def update_charts(regions, avocado_type, start_date, end_date):
         return create_price_chart(filtered_data), create_volume_chart(filtered_data)
 
     except Exception as e:
-        print(f"Error in callback: {str(e)}")
+        logger.error(f"Error in callback: {str(e)}", exc_info=True)
         # Return empty figures on error
         error_fig = {"data": [], "layout": {"title": f"Error: {str(e)}"}}
         return error_fig, error_fig
@@ -987,7 +990,7 @@ def update_scatter_chart(regions, avocado_type, start_date, end_date, x_col, y_c
         return create_scatter_chart(filtered_data, x_col, y_col)
 
     except Exception as e:
-        print(f"Error in scatter chart callback: {str(e)}")
+        logger.error(f"Error in scatter chart callback: {str(e)}", exc_info=True)
         return {"data": [], "layout": {"title": f"Error: {str(e)}"}}
 
 
@@ -1030,7 +1033,7 @@ def update_box_plot(regions, avocado_type, start_date, end_date, column, group_b
         return create_box_plot(filtered_data, column, group_by)
 
     except Exception as e:
-        print(f"Error in box plot callback: {str(e)}")
+        logger.error(f"Error in box plot callback: {str(e)}", exc_info=True)
         return {"data": [], "layout": {"title": f"Error: {str(e)}"}}
 
 
