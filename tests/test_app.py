@@ -17,6 +17,7 @@ from app import (
     create_volume_chart,
     data,
     download_filtered_csv,
+    external_stylesheets,
     filter_data,
     update_box_plot,
     update_charts,
@@ -252,6 +253,30 @@ def collect_text(component):
     elif children is not None:
         texts.extend(collect_text(children))
     return texts
+
+
+def test_google_fonts_link_loads_brand_fonts_and_drops_lato():
+    hrefs = " ".join(sheet["href"] for sheet in external_stylesheets)
+    assert "Fraunces" in hrefs
+    assert "Inter" in hrefs
+    assert "IBM+Plex+Mono" in hrefs
+    assert "Lato" not in hrefs
+
+
+def test_section_titles_use_the_display_typeface():
+    for title_id in ("scatter-section-title", "box-plot-section-title"):
+        title = find_component_by_id(app.layout, title_id)
+        assert title is not None, f"{title_id} not found in layout"
+        assert "Fraunces" in title.style["font-family"]
+
+
+def test_header_contains_the_cross_section_mark():
+    mark = find_component_by_id(app.layout, "header-mark")
+    assert mark is not None
+
+
+def test_header_no_longer_renders_the_emoji():
+    assert "🥑" not in collect_text(app.layout)
 
 
 def test_summary_panel_shows_avg_price_and_total_volume():

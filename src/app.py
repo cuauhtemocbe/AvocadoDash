@@ -125,6 +125,7 @@ def cross_section_mark():
             height="48",
             alt="",
         ),
+        id="header-mark",
         className="header-mark",
     )
 
@@ -353,7 +354,7 @@ app.layout = html.Div(
                         "text-align": "center",
                         "margin": "40px 0 20px 0",
                         "color": "var(--pit)",
-                        "font-family": "var(--font-display)",
+                        "font-family": "Fraunces, serif",
                         "font-size": "28px",
                     },
                 ),
@@ -437,7 +438,7 @@ app.layout = html.Div(
                         "text-align": "center",
                         "margin": "40px 0 20px 0",
                         "color": "var(--pit)",
-                        "font-family": "var(--font-display)",
+                        "font-family": "Fraunces, serif",
                         "font-size": "28px",
                     },
                 ),
