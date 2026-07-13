@@ -101,14 +101,23 @@ body {
 }
 
 .menu {
-    height: 112px;
-    width: 912px;
+    width: 100%;
     display: flex;
-    justify-content: space-evenly;
-    padding-top: 24px;
-    margin: -80px auto 0 auto;
-    background-color: #FFFFFF;
-    box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 24px 10px;
+    margin: 0;
+    background-color: var(--parchment);
+}
+
+.menu > div {
+    padding: 0 32px;
+    border-left: 1px solid rgba(139, 90, 43, 0.25);
+}
+
+.menu > div:first-child {
+    border-left: none;
 }
 
 .Select-control {
