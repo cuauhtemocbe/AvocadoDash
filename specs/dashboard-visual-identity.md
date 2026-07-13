@@ -1,6 +1,6 @@
 ---
 title: Dashboard Visual Identity Redesign
-status: in-progress
+status: completed
 created: 2026-07-12
 updated: 2026-07-12
 issue: "#9, #10, #11, #12, #13, #14"
@@ -136,31 +136,31 @@ disciplined around it.
 
 ### Functional Requirements
 
-- [ ] Global color tokens (`--ink`, `--parchment`, `--flesh`, `--pit`,
+- [x] Global color tokens (`--ink`, `--parchment`, `--flesh`, `--pit`,
       `--bruise`, `--cream-text`) defined once in `style.css` and used
       everywhere the current hard-coded hex values appear.
-- [ ] Fraunces (display) + Inter (body) + IBM Plex Mono (data) loaded and
+- [x] Fraunces (display) + Inter (body) + IBM Plex Mono (data) loaded and
       applied per the Type section above, replacing Lato.
-- [ ] Header redesigned on `--ink` with the Cross-Section Mark replacing
+- [x] Header redesigned on `--ink` with the Cross-Section Mark replacing
       the 🥑 emoji.
-- [ ] Filter bar redesigned as a full-width `--parchment` band with
+- [x] Filter bar redesigned as a full-width `--parchment` band with
       hairline dividers, replacing the floating white pill + box-shadow.
-- [ ] Chart chrome (`plot_bgcolor`, `paper_bgcolor`, `gridcolor`, box-plot
+- [x] Chart chrome (`plot_bgcolor`, `paper_bgcolor`, `gridcolor`, box-plot
       `color_map`, region line palette) updated to the new token colors.
-- [ ] Summary panel KPI values render in the mono face; price-change
+- [x] Summary panel KPI values render in the mono face; price-change
       trend shows a ▲/▼ glyph in addition to color (accessibility fix).
-- [ ] Fixed pixel widths in `style.css` (`.menu`, `.Select-control`,
+- [x] Fixed pixel widths in `style.css` (`.menu`, `.Select-control`,
       `.wrapper`) replaced with fluid/relative sizing so the layout
       doesn't overflow below ~768px.
 
 ### Non-Functional Requirements
 
-- [ ] No change to any `data.query()` expression, DataFrame column access,
+- [x] No change to any `data.query()` expression, DataFrame column access,
       or callback filtering logic — this is a display-only change.
-- [ ] No new Python runtime dependency (fonts load via
+- [x] No new Python runtime dependency (fonts load via
       `external_stylesheets`/Google Fonts, same mechanism as the existing
       Lato link).
-- [ ] `make lint` / `make format-check` stay clean.
+- [x] `make lint` / `make format-check` stay clean.
 
 ## Boundaries & Constraints
 
@@ -188,10 +188,10 @@ disciplined around it.
 
 ## Success Criteria
 
-- [ ] All Functional Requirements implemented.
-- [ ] `make lint` and `make format-check` are clean.
-- [ ] No existing test regresses.
-- [ ] Broken into GitHub issues (see `/user-stories`), each independently
+- [x] All Functional Requirements implemented.
+- [x] `make lint` and `make format-check` are clean.
+- [x] No existing test regresses.
+- [x] Broken into GitHub issues (see `/user-stories`), each independently
       shippable.
 
 ## Implementation Plan
