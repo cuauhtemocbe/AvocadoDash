@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Lints the codebase with ruff and scans the staged diff for secrets
-# before allowing a commit.
+# Scans the staged diff for secrets, then runs the full quality-gate
+# suite (lint, format-check, typecheck, test) before allowing a commit.
 # Enable with: make install-hooks
 # Runs inside Docker via the dev image — build it first with: make docker-build-dev
 set -euo pipefail
@@ -8,8 +8,4 @@ set -euo pipefail
 echo "Scanning staged changes for secrets..."
 make secret-scan
 
-echo "Running ruff lint checks..."
-make lint
-
-echo "Checking code formatting with ruff..."
-make format-check
+make validate

@@ -45,6 +45,8 @@ typecheck: ## Corre mypy --strict sobre src/ (relajado sobre tests/). Requiere `
 	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run mypy --strict src
 	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run mypy tests
 
+validate: lint format-check typecheck test ## Corre todos los quality gates (mismo comando que usan el pre-commit hook y CI)
+
 ## --- Docker (build de las imágenes) ---
 
 docker-build: ## Construye la imagen Docker de producción
