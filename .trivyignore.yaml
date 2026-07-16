@@ -1,0 +1,8 @@
+# Documented exceptions for Trivy findings, e.g.:
+#
+# vulnerabilities:
+#   - id: CVE-2024-XXXXX
+#     statement: "Not exploitable here because ... — reviewed 2026-07-16."
+#
+# No exceptions yet — keep this file for the day one is actually needed,
+# don't add blanket ignores just to make CI green.
