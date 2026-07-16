@@ -57,6 +57,12 @@ WORKDIR /app
 
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 
+# pip ships in the base image but is never invoked at runtime (dependencies
+# are already installed in the venv copied from `builder`) — removing it
+# drops whatever CVEs land on it (e.g. CVE-2025-8869) instead of carrying
+# them for no reason.
+RUN python -m pip uninstall -y pip
+
 COPY --from=builder /app/.venv /app/.venv
 COPY src ./src
 
