@@ -23,7 +23,7 @@ make run                        # serves on http://localhost:8050 with hot-reloa
 
 # Tests and lint also run inside Docker, against the dev image
 make docker-build-dev           # once, or whenever dependencies change
-make test                       # pytest (config in [tool.pytest.ini_options])
+make test                       # pytest + coverage (config in [tool.pytest.ini_options])
 make lint                       # ruff check
 make format                     # ruff format
 make format-check               # ruff format --check
@@ -35,7 +35,12 @@ docker run -p 8050:8050 avocado-dash  # or: make docker-run
 
 Ruff (`[tool.ruff]` in `pyproject.toml`) is the linter and formatter — line
 length 88, target `py312`. Pytest is configured with `pythonpath = ["src"]`
-so tests import `app` directly (see `tests/test_app.py`). A pre-commit git
+so tests import `app` directly (see `tests/test_app.py`). `addopts` in
+`[tool.pytest.ini_options]` enables `pytest-cov` on every `make test` run,
+enforcing `--cov-fail-under=80` (a global floor, not tiered by module —
+current coverage sits around 96%) and writing `tests/coverage.xml` — that
+path is already bind-mounted (see the Docker section above), so the report
+shows up on the host without a manual `docker compose cp` step. A pre-commit git
 hook (`.githooks/pre-commit`, enabled via `make install-hooks`) runs
 `make lint` + `make format-check` — same as everything else, this runs
 against the `avocadodash:dev` image, so `make docker-build-dev` must have
