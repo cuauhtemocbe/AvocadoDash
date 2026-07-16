@@ -11,9 +11,6 @@ env/
 venv/
 ENV/
 
-# Poetry
-*.lock
-
 # Python
 __pycache__/
 *.pyc

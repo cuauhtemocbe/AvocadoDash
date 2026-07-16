@@ -1,4 +1,4 @@
-.PHONY: help run test lint format format-check \
+.PHONY: help run test lint format format-check lock-check \
 	docker-build docker-build-dev docker-run docker-stop docker-shell \
 	install-hooks
 
@@ -33,6 +33,9 @@ format: ## Formatea el código con ruff format dentro de Docker. Requiere `make 
 
 format-check: ## Verifica el formato sin modificar archivos, dentro de Docker. Requiere `make docker-build-dev` antes
 	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run ruff format --check .
+
+lock-check: ## Verifica que poetry.lock esté sincronizado con pyproject.toml. Requiere `make docker-build-dev` antes
+	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry check --lock
 
 ## --- Docker (build de las imágenes) ---
 

@@ -83,7 +83,11 @@ project's Poetry version (`SolverProblemError: ... doesn't match any
 versions`, even though the packages exist on PyPI). If dev dependencies
 ever need to change, edit `[tool.poetry.group.dev.dependencies]` directly
 and run `poetry lock` (any Poetry install can regenerate the lock file;
-the project doesn't require a specific Poetry version).
+the project doesn't require a specific Poetry version). `poetry.lock` is
+committed — CI's `lock-check` job (`make lock-check` → `poetry check
+--lock`) fails the build if it drifts out of sync with `pyproject.toml`,
+so always run `poetry lock` locally after editing dependencies and commit
+the result in the same change.
 
 Railway deployment config lives in `railway.json`; it runs the same
 `poetry run python src/app.py` start command and reads the port from the
