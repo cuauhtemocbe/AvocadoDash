@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+# Least-privilege default: none of the jobs below need to write anything
+# (no PR comments, no releases, no pushes). Escalate per-job if that ever
+# changes, rather than raising this default.
+permissions: read-all
+
 jobs:
   lint:
     runs-on: ubuntu-latest
