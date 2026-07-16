@@ -44,3 +44,12 @@ jobs:
 
       - name: Verify poetry.lock is in sync with pyproject.toml
         run: make lock-check
+
+  license-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify LICENSE file exists
+        run: test -f LICENSE
