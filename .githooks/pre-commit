@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Lints the codebase with ruff before allowing a commit.
+# Lints the codebase with ruff and scans the staged diff for secrets
+# before allowing a commit.
 # Enable with: make install-hooks
 # Runs inside Docker via the dev image — build it first with: make docker-build-dev
 set -euo pipefail
+
+echo "Scanning staged changes for secrets..."
+make secret-scan
 
 echo "Running ruff lint checks..."
 make lint

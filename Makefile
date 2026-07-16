@@ -1,9 +1,10 @@
-.PHONY: help run test lint format format-check lock-check \
+.PHONY: help run test lint format format-check lock-check secret-scan \
 	docker-build docker-build-dev docker-run docker-stop docker-shell \
 	install-hooks
 
 IMAGE_NAME := avocadodash
 CONTAINER_NAME := avocadodash
+GITLEAKS_IMAGE := zricethezav/gitleaks:latest
 PORT := 8050
 
 help: ## Muestra esta ayuda
@@ -36,6 +37,9 @@ format-check: ## Verifica el formato sin modificar archivos, dentro de Docker. R
 
 lock-check: ## Verifica que poetry.lock esté sincronizado con pyproject.toml. Requiere `make docker-build-dev` antes
 	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry check --lock
+
+secret-scan: ## Escanea el diff staged en busca de secretos con gitleaks (usa el índice de git, no todo el repo)
+	docker run --rm -v "$(CURDIR)":/repo -w /repo $(GITLEAKS_IMAGE) protect --staged -v --source /repo
 
 ## --- Docker (build de las imágenes) ---
 

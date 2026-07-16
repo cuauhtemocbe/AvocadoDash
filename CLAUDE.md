@@ -42,9 +42,15 @@ current coverage sits around 96%) and writing `tests/coverage.xml` — that
 path is already bind-mounted (see the Docker section above), so the report
 shows up on the host without a manual `docker compose cp` step. A pre-commit git
 hook (`.githooks/pre-commit`, enabled via `make install-hooks`) runs
-`make lint` + `make format-check` — same as everything else, this runs
-against the `avocadodash:dev` image, so `make docker-build-dev` must have
-been run at least once (no local Poetry env needed for the hook).
+`make secret-scan` + `make lint` + `make format-check` — same as everything
+else, this runs against Docker images (`avocadodash:dev` for lint/format,
+the standalone `zricethezav/gitleaks` image for the secret scan), so
+`make docker-build-dev` must have been run at least once (no local Poetry
+env needed for the hook). `make secret-scan` runs gitleaks with `--staged`,
+scanning only the staged diff (git index) — it will not catch a secret
+sitting in an untracked or unstaged file; that's an intentional scope
+limit, not a gap, since staging is the last checkpoint before the secret
+would actually leave the machine on commit.
 
 The primary dev workflow is `make run`: code stays on the host (edit with
 any local editor/IDE) while the app actually runs inside the container,
