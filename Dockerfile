@@ -3,32 +3,50 @@ FROM python:3.12.6-slim AS base
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# --- Builder stage: resolves and installs runtime dependencies into a venv.
+# Only this stage (and dev) needs poetry/git — production copies the venv only. ---
+FROM base AS builder
+
 RUN apt-get update && \
-    apt-get install -y git && \
+    apt-get install -y --no-install-recommends git && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install poetry
-RUN pip install "poetry"
+RUN pip install --no-cache-dir poetry
+RUN poetry config virtualenvs.in-project true
+
+COPY pyproject.toml poetry.lock README.md ./
+RUN poetry install --no-root --only main --no-interaction
+
+# --- Dev image: full toolchain (poetry, git, dev deps) so `make test`/`make lint` can run in-container ---
+FROM base AS dev
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir poetry
 RUN poetry config virtualenvs.create false
 
 # Copy application code
 COPY . .
 
+RUN poetry install --no-root
+
 # Expose port (Railway will override this)
 EXPOSE 8050
 
-# --- Dev image: adds ruff/pytest so `make test`/`make lint` can run in-container ---
-FROM base AS dev
-
-RUN poetry install --no-root
-
 CMD ["poetry", "run", "python", "src/app.py"]
 
-# --- Production image (default build target): runtime deps only, no dev tooling ---
+# --- Production image (default build target): runtime artifacts only, no poetry/git ---
 FROM base AS production
 
-RUN poetry install --no-root --only main
+COPY --from=builder /app/.venv /app/.venv
+COPY src ./src
 
-CMD ["poetry", "run", "python", "src/app.py"]
+ENV PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 8050
+
+CMD ["python", "src/app.py"]

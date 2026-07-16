@@ -46,6 +46,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Documentation
-README.md
+# Documentation (README.md IS needed at build time — poetry reads it via
+# pyproject.toml's `readme` field even with --no-root)
 docs/
