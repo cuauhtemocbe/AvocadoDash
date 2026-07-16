@@ -52,13 +52,26 @@ non-debug.
 `make test`/`make lint`/`make format`/`make format-check` follow the same
 pattern, but against `avocadodash:dev` (built by `make docker-build-dev`)
 instead of `avocadodash:latest` — that's the only image with the `dev`
-dependency group (`ruff`, `pytest`) installed, since the Dockerfile is
-multi-stage: a shared `base` stage, a `dev` stage (`poetry install
---no-root`, full groups) and the `production` stage (`poetry install
---no-root --only main`, default build target, no dev tooling). Both
-`make run` and the `test`/`lint`/`format*` targets bind-mount the repo
-into the container, so they always operate on the current code — but they
-do NOT pick up new/changed dependencies automatically; rebuild the
+dependency group (`ruff`, `pytest`) installed, since the Dockerfile has
+four stages: a shared `base` (`FROM python:3.12.6-slim`, floating tag), a
+`builder` stage that resolves dependencies into an in-project venv
+(`poetry install --no-root --only main`), a `dev` stage (also `FROM
+base`, full `poetry install --no-root` with dev deps, used by
+`test`/`lint`/`format*`), and `production` (the default build target).
+`production` does **not** extend `base` — it starts its own `FROM
+python:3.12.6-slim@sha256:...` pinned by digest, then copies only
+`builder`'s venv and `src/`, so the final image has no `poetry`/`git`
+installed and runs as a non-root `appuser` with a `HEALTHCHECK` against
+`/`. This pinning asymmetry is deliberate: `base` (used by `dev`/`builder`)
+stays on the floating tag so rebuilds pick up security patches
+automatically, while `production` pins by digest for byte-for-byte
+reproducible builds — bump the digest manually (or let Dependabot open
+the PR) when moving to a new Python patch version, don't revert it to a
+floating tag "to match dev".
+
+Both `make run` and the `test`/`lint`/`format*` targets bind-mount the
+repo into the container, so they always operate on the current code — but
+they do NOT pick up new/changed dependencies automatically; rebuild the
 relevant image (`docker-build` / `docker-build-dev`) after touching
 `pyproject.toml`. `make docker-stop` stops both the `run` dev container
 and the `docker-run` production container in one call.

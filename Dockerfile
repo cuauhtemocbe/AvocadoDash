@@ -39,8 +39,16 @@ EXPOSE 8050
 
 CMD ["poetry", "run", "python", "src/app.py"]
 
-# --- Production image (default build target): runtime artifacts only, no poetry/git ---
-FROM base AS production
+# --- Production image (default build target): runtime artifacts only, no poetry/git.
+# Base image pinned by digest here (NOT via the shared `base` stage above) for
+# byte-for-byte reproducible builds. dev/builder intentionally stay on the
+# floating `python:3.12.6-slim` tag — receiving automatic security patches on
+# rebuild matters more there than exact reproducibility. This asymmetry is
+# deliberate; update the digest (Dependabot bumps it automatically) rather
+# than reverting to a floating tag here. ---
+FROM python:3.12.6-slim@sha256:ad48727987b259854d52241fac3bc633574364867b8e20aec305e6e7f4028b26 AS production
+
+WORKDIR /app
 
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 
