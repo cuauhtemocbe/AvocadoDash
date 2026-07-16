@@ -1,11 +1,12 @@
 # utils.py
 
 from datetime import timedelta
+from typing import Any
 
 import pandas as pd
 
 
-def calculate_summary_stats(data):
+def calculate_summary_stats(data: pd.DataFrame) -> dict[str, Any]:
     """Calculate summary statistics for the dataset."""
     return {
         "avg_price": data["AveragePrice"].mean(),
@@ -16,7 +17,7 @@ def calculate_summary_stats(data):
     }
 
 
-def format_number(num):
+def format_number(num: float) -> str:
     """Format large numbers with proper suffixes."""
     if num >= 1_000_000:
         return f"{num / 1_000_000:.1f}M"
@@ -26,7 +27,13 @@ def format_number(num):
         return f"{num:.0f}"
 
 
-def calculate_price_change(data, regions, avocado_type, start_date, end_date):
+def calculate_price_change(
+    data: pd.DataFrame,
+    regions: list[str],
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+) -> float | None:
     """Percent change in average price vs. the immediately preceding period
     of equal length, aggregated across all `regions`. Returns None if
     either period has no data."""
@@ -58,7 +65,9 @@ def calculate_price_change(data, regions, avocado_type, start_date, end_date):
     return (current_avg - previous_avg) / previous_avg * 100
 
 
-def find_region_extremes(data, avocado_type, start_date, end_date):
+def find_region_extremes(
+    data: pd.DataFrame, avocado_type: str, start_date: str, end_date: str
+) -> dict[str, Any] | None:
     """Find the best/worst average-price regions for a type + date filter,
     across all regions. Returns None if the filter matches no rows."""
     filtered = data.query(

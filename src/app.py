@@ -2,9 +2,10 @@
 
 import logging
 import os
+from typing import Any
 
 import pandas as pd
-from dash import Dash, Input, Output, State, dcc, html, no_update
+from dash import Dash, Input, NoUpdate, Output, State, dcc, html, no_update
 
 import translations
 from utils import (
@@ -16,8 +17,12 @@ from utils import (
 
 logger = logging.getLogger(__name__)
 
+TooltipChildren = list[str | html.Span]
+HeaderText = list[str | html.A]
+DropdownOptions = list[dcc.Dropdown.Options]
 
-def load_data():
+
+def load_data() -> pd.DataFrame:
     """Load and preprocess the avocado dataset."""
     try:
         # Use relative path from the script location
@@ -34,7 +39,9 @@ def load_data():
         raise Exception(f"Error loading data: {str(e)}")
 
 
-def filter_data(regions, avocado_type, start_date, end_date):
+def filter_data(
+    regions: list[str], avocado_type: str, start_date: str, end_date: str
+) -> pd.DataFrame:
     """Filter the module-level dataset by selected regions/type/date-range."""
     return data.query(
         "region in @regions and type == @avocado_type"
@@ -45,7 +52,7 @@ def filter_data(regions, avocado_type, start_date, end_date):
 EMPTY_REGION_MESSAGE = translations.t("empty.select_region", "en")
 
 
-def empty_state_figure(message, lang="en"):
+def empty_state_figure(message: str, lang: str = "en") -> dict[str, Any]:
     """Empty Plotly figure with a centered annotation explaining why."""
     return {
         "data": [],
@@ -113,7 +120,7 @@ numeric_columns = [
 ]
 
 
-def cross_section_mark():
+def cross_section_mark() -> html.Div:
     """The Cross-Section Mark: concentric rings echoing the avocado's
     skin/flesh/pit layering — the app's signature element, replacing the
     generic 🥑 emoji as the header brand mark."""
@@ -137,24 +144,24 @@ def cross_section_mark():
     )
 
 
-def info_icon(tooltip_text):
+def info_icon(tooltip_text: str) -> html.Span:
     """Small circular "i" badge that shows `tooltip_text` as a tooltip on hover."""
     return html.Span("i", className="info-icon", title=tooltip_text)
 
 
-def label_with_tooltip(text, tooltip_text):
+def label_with_tooltip(text: str, tooltip_text: str) -> TooltipChildren:
     """Menu-title `children` list: the label text plus its info-icon tooltip."""
     return [text, info_icon(tooltip_text)]
 
 
-def build_type_options(lang):
+def build_type_options(lang: str) -> DropdownOptions:
     return [
         {"label": translations.type_label(avocado_type, lang), "value": avocado_type}
         for avocado_type in avocado_types
     ]
 
 
-def build_numeric_column_options(lang):
+def build_numeric_column_options(lang: str) -> DropdownOptions:
     return [
         {
             "label": translations.column_label(col, lang),
@@ -165,7 +172,7 @@ def build_numeric_column_options(lang):
     ]
 
 
-def build_groupby_options(lang):
+def build_groupby_options(lang: str) -> DropdownOptions:
     return [
         {
             "label": translations.groupby_label(value, lang),
@@ -195,16 +202,22 @@ server = app.server  # This is needed for Railway deployment
 # Default language on load — the target audience is primarily Spanish-speaking.
 INITIAL_LANG = "es"
 
+LANGUAGE_TOGGLE_OPTIONS: list[dcc.RadioItems.Options] = [
+    {"label": "ES", "value": "es"},
+    {"label": "EN", "value": "en"},
+]
+
+REGION_FILTER_OPTIONS: DropdownOptions = [
+    {"label": region, "value": region} for region in regions
+]
+
 app.layout = html.Div(
     children=[
         html.Div(
             children=[
                 dcc.RadioItems(
                     id="language-toggle",
-                    options=[
-                        {"label": "ES", "value": "es"},
-                        {"label": "EN", "value": "en"},
-                    ],
+                    options=LANGUAGE_TOGGLE_OPTIONS,
                     value=INITIAL_LANG,
                     inline=True,
                     className="language-toggle",
@@ -253,9 +266,7 @@ app.layout = html.Div(
                         ),
                         dcc.Dropdown(
                             id="region-filter",
-                            options=[
-                                {"label": region, "value": region} for region in regions
-                            ],
+                            options=REGION_FILTER_OPTIONS,
                             value=["Albany"],
                             multi=True,
                             clearable=True,
@@ -556,7 +567,7 @@ app.layout = html.Div(
 TREND_GLYPHS = {"summary-stat-up": "▲ ", "summary-stat-down": "▼ "}
 
 
-def summary_stat_card(label, value, extra_class=""):
+def summary_stat_card(label: str, value: str, extra_class: str = "") -> html.Div:
     """A single KPI card for the summary panel. A `summary-stat-up`/
     `summary-stat-down` extra_class also prefixes `value` with a ▲/▼ glyph,
     so trend direction is never communicated by color alone."""
@@ -574,8 +585,13 @@ def summary_stat_card(label, value, extra_class=""):
 
 
 def create_summary_panel(
-    filtered_data, regions, avocado_type, start_date, end_date, lang="en"
-):
+    filtered_data: pd.DataFrame,
+    regions: list[str],
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    lang: str = "en",
+) -> html.Div:
     """Build the summary panel's KPI cards for the current filter selection."""
     if filtered_data.empty:
         return html.Div(
@@ -628,11 +644,17 @@ def create_summary_panel(
     return html.Div(cards, className="summary-stats")
 
 
-def _region_traces(filtered_data, y_column, hover_label, hover_format, lang="en"):
+def _region_traces(
+    filtered_data: pd.DataFrame,
+    y_column: str,
+    hover_label: str,
+    hover_format: str,
+    lang: str = "en",
+) -> list[dict[str, Any]]:
     """One line+marker trace per region present in `filtered_data`, colored
     in a fixed palette order by the current selection (see
     REGION_COLOR_PALETTE for why this isn't a fixed per-region color)."""
-    traces = []
+    traces: list[dict[str, Any]] = []
     selected_regions = sorted(filtered_data["region"].unique())
     date_label = translations.t("common.date", lang)
     for i, region in enumerate(selected_regions):
@@ -656,7 +678,7 @@ def _region_traces(filtered_data, y_column, hover_label, hover_format, lang="en"
     return traces
 
 
-def create_price_chart(filtered_data, lang="en"):
+def create_price_chart(filtered_data: pd.DataFrame, lang: str = "en") -> dict[str, Any]:
     """Create the price chart, one line per region in `filtered_data`."""
     price_label = translations.t("common.price", lang)
     traces = _region_traces(
@@ -698,7 +720,9 @@ def create_price_chart(filtered_data, lang="en"):
     }
 
 
-def create_volume_chart(filtered_data, lang="en"):
+def create_volume_chart(
+    filtered_data: pd.DataFrame, lang: str = "en"
+) -> dict[str, Any]:
     """Create the volume chart, one line per region in `filtered_data`."""
     volume_label = translations.t("common.volume", lang)
     traces = _region_traces(
@@ -739,12 +763,14 @@ def create_volume_chart(filtered_data, lang="en"):
     }
 
 
-def create_box_plot(filtered_data, column, group_by, lang="en"):
+def create_box_plot(
+    filtered_data: pd.DataFrame, column: str, group_by: str, lang: str = "en"
+) -> dict[str, Any]:
     """Create a box plot for the selected column grouped by the specified variable."""
     # Color mapping for different groups
     color_map = TYPE_COLOR_MAP
 
-    traces = []
+    traces: list[dict[str, Any]] = []
 
     if group_by == "type":
         # Group by avocado type
@@ -852,7 +878,9 @@ def create_box_plot(filtered_data, column, group_by, lang="en"):
     }
 
 
-def create_scatter_chart(filtered_data, x_col, y_col, lang="en"):
+def create_scatter_chart(
+    filtered_data: pd.DataFrame, x_col: str, y_col: str, lang: str = "en"
+) -> dict[str, Any]:
     """Create a scatter plot with selected columns."""
     # Create color mapping for avocado types
     color_map = TYPE_COLOR_MAP
@@ -861,7 +889,7 @@ def create_scatter_chart(filtered_data, x_col, y_col, lang="en"):
     region_label = translations.t("common.region", lang)
     date_label = translations.t("common.date", lang)
 
-    traces = []
+    traces: list[dict[str, Any]] = []
     for avocado_type in filtered_data["type"].unique():
         type_data = filtered_data[filtered_data["type"] == avocado_type]
         traces.append(
@@ -947,7 +975,29 @@ def create_scatter_chart(filtered_data, x_col, y_col, lang="en"):
     Output("box-plot-groupby", "options"),
     Input("language-toggle", "value"),
 )
-def update_ui_language(lang):
+def update_ui_language(
+    lang: str,
+) -> tuple[
+    HeaderText,
+    str,
+    HeaderText,
+    str,
+    str,
+    TooltipChildren,
+    str,
+    TooltipChildren,
+    DropdownOptions,
+    TooltipChildren,
+    str,
+    TooltipChildren,
+    DropdownOptions,
+    TooltipChildren,
+    DropdownOptions,
+    TooltipChildren,
+    DropdownOptions,
+    TooltipChildren,
+    DropdownOptions,
+]:
     """Retranslate every static, filter-independent piece of text/labels in
     the layout. Only `children`/`placeholder`/`options["label"|"title"]` are
     touched — dropdown `value`s (and thus filtering/query logic) never
@@ -1035,7 +1085,13 @@ def update_ui_language(lang):
     Input("date-range", "end_date"),
     Input("language-toggle", "value"),
 )
-def update_summary_panel(regions, avocado_type, start_date, end_date, lang="en"):
+def update_summary_panel(
+    regions: list[str] | None,
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    lang: str = "en",
+) -> html.Div:
     """Update the summary panel based on filter selections."""
     try:
         if not regions:
@@ -1061,7 +1117,13 @@ def update_summary_panel(regions, avocado_type, start_date, end_date, lang="en")
     Input("date-range", "end_date"),
     Input("language-toggle", "value"),
 )
-def update_download_controls(regions, avocado_type, start_date, end_date, lang="en"):
+def update_download_controls(
+    regions: list[str] | None,
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    lang: str = "en",
+) -> tuple[bool, str]:
     """Enable/disable the CSV download button based on filter selections."""
     try:
         if not regions:
@@ -1085,7 +1147,13 @@ def update_download_controls(regions, avocado_type, start_date, end_date, lang="
     State("date-range", "end_date"),
     prevent_initial_call=True,
 )
-def download_filtered_csv(n_clicks, regions, avocado_type, start_date, end_date):
+def download_filtered_csv(
+    n_clicks: int | None,
+    regions: list[str] | None,
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+) -> dict[str, Any] | NoUpdate:
     """Export the currently filtered rows as a downloadable CSV."""
     try:
         if not regions:
@@ -1093,7 +1161,11 @@ def download_filtered_csv(n_clicks, regions, avocado_type, start_date, end_date)
         filtered_data = filter_data(regions, avocado_type, start_date, end_date)
         if filtered_data.empty:
             return no_update
-        return dcc.send_data_frame(
+        # dash.dcc's dynamic __all__ defeats mypy's re-export check, and
+        # express.send_data_frame has no upstream annotations — both Dash-stub
+        # gaps; kept as `dcc.send_data_frame` (vs. a direct import) so tests
+        # can still `patch("app.dcc.send_data_frame", ...)`.
+        return dcc.send_data_frame(  # type: ignore[attr-defined,no-untyped-call,no-any-return]
             filtered_data.to_csv, "avocado_filtered.csv", index=False
         )
     except Exception as e:
@@ -1110,7 +1182,13 @@ def download_filtered_csv(n_clicks, regions, avocado_type, start_date, end_date)
     Input("date-range", "end_date"),
     Input("language-toggle", "value"),
 )
-def update_charts(regions, avocado_type, start_date, end_date, lang="en"):
+def update_charts(
+    regions: list[str] | None,
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    lang: str = "en",
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Update charts based on filter selections."""
     try:
         if not regions:
@@ -1153,8 +1231,14 @@ def update_charts(regions, avocado_type, start_date, end_date, lang="en"):
     Input("language-toggle", "value"),
 )
 def update_scatter_chart(
-    regions, avocado_type, start_date, end_date, x_col, y_col, lang="en"
-):
+    regions: list[str] | None,
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    x_col: str,
+    y_col: str,
+    lang: str = "en",
+) -> dict[str, Any]:
     """Update scatter chart based on filter selections and axis choices."""
     try:
         if not regions:
@@ -1186,8 +1270,14 @@ def update_scatter_chart(
     Input("language-toggle", "value"),
 )
 def update_box_plot(
-    regions, avocado_type, start_date, end_date, column, group_by, lang="en"
-):
+    regions: list[str] | None,
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    column: str,
+    group_by: str,
+    lang: str = "en",
+) -> dict[str, Any]:
     """Update box plot based on filter selections and grouping choice."""
     try:
         # For box plots, we might want to show data across different groups

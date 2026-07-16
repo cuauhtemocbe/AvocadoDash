@@ -32,3 +32,6 @@ select = ["E", "F", "I", "W"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "--cov=app --cov=utils --cov=translations --cov-report=term-missing --cov-report=xml:tests/coverage.xml --cov-fail-under=80"
+
+[tool.mypy]
+mypy_path = "src"

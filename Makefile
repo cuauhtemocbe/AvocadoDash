@@ -1,4 +1,4 @@
-.PHONY: help run test lint format format-check lock-check secret-scan \
+.PHONY: help run test lint format format-check lock-check secret-scan typecheck validate \
 	docker-build docker-build-dev docker-run docker-stop docker-shell \
 	install-hooks
 
@@ -40,6 +40,10 @@ lock-check: ## Verifica que poetry.lock esté sincronizado con pyproject.toml. R
 
 secret-scan: ## Escanea el diff staged en busca de secretos con gitleaks (usa el índice de git, no todo el repo)
 	docker run --rm -v "$(CURDIR)":/repo -w /repo $(GITLEAKS_IMAGE) protect --staged -v --source /repo
+
+typecheck: ## Corre mypy --strict sobre src/ (relajado sobre tests/). Requiere `make docker-build-dev` antes
+	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run mypy --strict src
+	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run mypy tests
 
 ## --- Docker (build de las imágenes) ---
 
