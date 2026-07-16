@@ -10,7 +10,10 @@ dataset). It is deployed on Railway.
 
 ## Commands
 
-Dependency management is via Poetry (Python 3.12.6 pinned in `pyproject.toml`).
+Dependency management is via Poetry (Python constrained to `>=3.12,<3.13`
+in `pyproject.toml`; the Docker base image tracks `python:3.12-slim`,
+currently resolving to 3.12.13 — see the digest-pinning note below for why
+it's not pinned to an older patch like `3.12.6`).
 Most of these are wrapped by the `Makefile` — run `make help` for the full list.
 
 ```bash
@@ -53,13 +56,13 @@ non-debug.
 pattern, but against `avocadodash:dev` (built by `make docker-build-dev`)
 instead of `avocadodash:latest` — that's the only image with the `dev`
 dependency group (`ruff`, `pytest`) installed, since the Dockerfile has
-four stages: a shared `base` (`FROM python:3.12.6-slim`, floating tag), a
+four stages: a shared `base` (`FROM python:3.12-slim`, floating tag), a
 `builder` stage that resolves dependencies into an in-project venv
 (`poetry install --no-root --only main`), a `dev` stage (also `FROM
 base`, full `poetry install --no-root` with dev deps, used by
 `test`/`lint`/`format*`), and `production` (the default build target).
 `production` does **not** extend `base` — it starts its own `FROM
-python:3.12.6-slim@sha256:...` pinned by digest, then copies only
+python:3.12-slim@sha256:...` pinned by digest, then copies only
 `builder`'s venv and `src/`, so the final image has no `poetry`/`git`
 installed and runs as a non-root `appuser` with a `HEALTHCHECK` against
 `/`. This pinning asymmetry is deliberate: `base` (used by `dev`/`builder`)
@@ -67,7 +70,13 @@ stays on the floating tag so rebuilds pick up security patches
 automatically, while `production` pins by digest for byte-for-byte
 reproducible builds — bump the digest manually (or let Dependabot open
 the PR) when moving to a new Python patch version, don't revert it to a
-floating tag "to match dev".
+floating tag "to match dev". Use a tag that's still being actively
+rebuilt (`python:3.12-slim`) for both, not a frozen historical patch tag
+like `python:3.12.6-slim` — once superseded, those stop receiving OS
+security patches, so pinning their digest just freezes in known CVEs
+(verified with Trivy: `3.12.6-slim` carried 72 CRITICAL/HIGH findings vs.
+11 on current `3.12-slim`, the rest fixed simply by tracking a
+maintained tag).
 
 Both `make run` and the `test`/`lint`/`format*` targets bind-mount the
 repo into the container, so they always operate on the current code — but
