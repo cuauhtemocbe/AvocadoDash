@@ -52,6 +52,16 @@ sitting in an untracked or unstaged file; that's an intentional scope
 limit, not a gap, since staging is the last checkpoint before the secret
 would actually leave the machine on commit.
 
+`main` has branch protection requiring the `lint`, `test`, `lock-check`,
+`license-check`, and `trivy-fs` CI checks (see `.github/workflows/ci.yml`)
+to pass before a PR can merge — `build` is deliberately excluded from that
+list since it only runs on push to `main` (`if: github.event_name ==
+'push'`), so it would never report a status on a PR and would block merges
+forever if required there. `enforce_admins` is disabled: the repo owner
+(single maintainer, low-traffic project) can still push directly to `main`
+when that makes sense — an explicit, documented exception, not a
+misconfiguration.
+
 The primary dev workflow is `make run`: code stays on the host (edit with
 any local editor/IDE) while the app actually runs inside the container,
 bind-mounted at `/app` with `DEBUG=true` so Dash's built-in reloader
