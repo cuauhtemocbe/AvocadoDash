@@ -42,11 +42,18 @@ CMD ["poetry", "run", "python", "src/app.py"]
 # --- Production image (default build target): runtime artifacts only, no poetry/git ---
 FROM base AS production
 
+RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
+
 COPY --from=builder /app/.venv /app/.venv
 COPY src ./src
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+USER appuser
+
 EXPOSE 8050
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8050/')" || exit 1
 
 CMD ["python", "src/app.py"]
