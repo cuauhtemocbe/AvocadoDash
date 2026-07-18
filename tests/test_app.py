@@ -20,6 +20,7 @@ from app import (
     download_filtered_csv,
     external_stylesheets,
     filter_data,
+    load_data,
     summary_stat_card,
     update_box_plot,
     update_charts,
@@ -122,6 +123,49 @@ def test_load_data_has_expected_columns():
     assert not data.empty
     for column in ("Date", "AveragePrice", "Total Volume", "region", "type"):
         assert column in data.columns
+
+
+def test_load_data_uses_default_path_when_env_var_unset(monkeypatch):
+    monkeypatch.delenv("AVOCADO_DATA_PATH", raising=False)
+
+    result = load_data()
+
+    assert not result.empty
+    assert set(result.columns) == set(data.columns)
+
+
+def test_load_data_uses_env_var_path_when_set(monkeypatch, tmp_path):
+    csv_path = tmp_path / "custom.csv"
+    csv_path.write_text(
+        "Date,AveragePrice,Total Volume,type,region\n"
+        "2020-01-01,1.50,1000,organic,Testville\n"
+    )
+    monkeypatch.setenv("AVOCADO_DATA_PATH", str(csv_path))
+
+    result = load_data()
+
+    assert len(result) == 1
+    assert result.iloc[0]["region"] == "Testville"
+
+
+def test_load_data_raises_file_not_found_for_missing_env_path(monkeypatch):
+    monkeypatch.setenv("AVOCADO_DATA_PATH", "/nonexistent/path/data.csv")
+
+    with pytest.raises(FileNotFoundError, match="/nonexistent/path/data.csv"):
+        load_data()
+
+
+def test_load_data_raises_clear_error_for_missing_required_column(
+    monkeypatch, tmp_path
+):
+    csv_path = tmp_path / "missing_region.csv"
+    csv_path.write_text(
+        "Date,AveragePrice,Total Volume,type\n2020-01-01,1.50,1000,organic\n"
+    )
+    monkeypatch.setenv("AVOCADO_DATA_PATH", str(csv_path))
+
+    with pytest.raises(ValueError, match="region"):
+        load_data()
 
 
 def test_region_filter_is_multi_select_with_single_region_default():

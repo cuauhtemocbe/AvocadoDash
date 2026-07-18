@@ -22,21 +22,34 @@ HeaderText = list[str | html.A]
 DropdownOptions = list[dcc.Dropdown.Options]
 
 
+REQUIRED_DATA_COLUMNS = {"Date", "AveragePrice", "Total Volume", "type", "region"}
+
+
 def load_data() -> pd.DataFrame:
-    """Load and preprocess the avocado dataset."""
+    """Load and preprocess the avocado dataset. The source path defaults to
+    the bundled CSV but can be overridden via AVOCADO_DATA_PATH (e.g. to
+    swap in a different dataset without a code change)."""
+    csv_path = os.environ.get(
+        "AVOCADO_DATA_PATH",
+        os.path.join(os.path.dirname(__file__), "avocado.csv"),
+    )
     try:
-        # Use relative path from the script location
-        csv_path = os.path.join(os.path.dirname(__file__), "avocado.csv")
-        data = (
-            pd.read_csv(csv_path)
-            .assign(Date=lambda df: pd.to_datetime(df["Date"], format="%Y-%m-%d"))
-            .sort_values(by="Date")
-        )
-        return data
+        raw_data = pd.read_csv(csv_path)
     except FileNotFoundError:
         raise FileNotFoundError(f"Could not find avocado.csv at {csv_path}")
     except Exception as e:
         raise Exception(f"Error loading data: {str(e)}")
+
+    missing_columns = REQUIRED_DATA_COLUMNS - set(raw_data.columns)
+    if missing_columns:
+        raise ValueError(
+            f"CSV at {csv_path} is missing required columns: "
+            f"{', '.join(sorted(missing_columns))}"
+        )
+
+    return raw_data.assign(
+        Date=lambda df: pd.to_datetime(df["Date"], format="%Y-%m-%d")
+    ).sort_values(by="Date")
 
 
 def filter_data(
