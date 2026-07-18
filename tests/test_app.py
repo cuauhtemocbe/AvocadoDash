@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+import sentry_sdk
 from dash import dcc, no_update
 
 from app import (
@@ -20,6 +21,7 @@ from app import (
     download_filtered_csv,
     external_stylesheets,
     filter_data,
+    init_sentry,
     load_data,
     summary_stat_card,
     update_box_plot,
@@ -431,15 +433,25 @@ def test_update_summary_panel_shows_message_when_no_regions_selected():
 def test_update_summary_panel_callback_handles_exception_without_crashing(caplog):
     with caplog.at_level(logging.ERROR):
         with patch("app.filter_data", side_effect=RuntimeError("boom")):
-            panel = update_summary_panel(
-                ["Albany"], "organic", "2015-01-01", "2015-12-31"
-            )
+            with patch("app.sentry_sdk.capture_exception") as mock_capture:
+                panel = update_summary_panel(
+                    ["Albany"], "organic", "2015-01-01", "2015-12-31"
+                )
 
     assert panel.className == "summary-empty"
     assert "boom" in panel.children.lower()
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.ERROR
     assert caplog.records[0].exc_info is not None
+    mock_capture.assert_called_once()
+    error_arg, kwargs = mock_capture.call_args.args[0], mock_capture.call_args.kwargs
+    assert str(error_arg) == "boom"
+    assert kwargs["extras"] == {
+        "regions": ["Albany"],
+        "type": "organic",
+        "start_date": "2015-01-01",
+        "end_date": "2015-12-31",
+    }
 
 
 @pytest.mark.parametrize(
@@ -618,9 +630,10 @@ def test_update_box_plot_groups_by_type_regardless_of_type_filter():
 def test_update_charts_callback_handles_exception_without_crashing(caplog):
     with caplog.at_level(logging.ERROR):
         with patch("app.create_price_chart", side_effect=RuntimeError("boom")):
-            price_fig, volume_fig = update_charts(
-                ["Albany"], "organic", "2015-01-01", "2015-12-31"
-            )
+            with patch("app.sentry_sdk.capture_exception") as mock_capture:
+                price_fig, volume_fig = update_charts(
+                    ["Albany"], "organic", "2015-01-01", "2015-12-31"
+                )
 
     assert price_fig["data"] == []
     assert volume_fig["data"] == []
@@ -629,6 +642,13 @@ def test_update_charts_callback_handles_exception_without_crashing(caplog):
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.ERROR
     assert caplog.records[0].exc_info is not None
+    mock_capture.assert_called_once()
+    assert mock_capture.call_args.kwargs["extras"] == {
+        "regions": ["Albany"],
+        "type": "organic",
+        "start_date": "2015-01-01",
+        "end_date": "2015-12-31",
+    }
 
 
 def test_create_box_plot_region_grouping_with_multiple_types_uses_one_trace_per_type():
@@ -712,20 +732,30 @@ def test_update_scatter_chart_returns_region_specific_message_when_no_regions():
 def test_update_scatter_chart_callback_handles_exception_without_crashing(caplog):
     with caplog.at_level(logging.ERROR):
         with patch("app.create_scatter_chart", side_effect=RuntimeError("boom")):
-            figure = update_scatter_chart(
-                ["Albany"],
-                "organic",
-                "2015-01-01",
-                "2015-12-31",
-                "AveragePrice",
-                "Total Volume",
-            )
+            with patch("app.sentry_sdk.capture_exception") as mock_capture:
+                figure = update_scatter_chart(
+                    ["Albany"],
+                    "organic",
+                    "2015-01-01",
+                    "2015-12-31",
+                    "AveragePrice",
+                    "Total Volume",
+                )
 
     assert figure["data"] == []
     assert "error" in figure["layout"]["title"].lower()
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.ERROR
     assert caplog.records[0].exc_info is not None
+    mock_capture.assert_called_once()
+    assert mock_capture.call_args.kwargs["extras"] == {
+        "regions": ["Albany"],
+        "type": "organic",
+        "start_date": "2015-01-01",
+        "end_date": "2015-12-31",
+        "x_col": "AveragePrice",
+        "y_col": "Total Volume",
+    }
 
 
 @pytest.mark.parametrize(
@@ -794,20 +824,30 @@ def test_update_box_plot_returns_empty_state_for_no_matching_data():
 def test_update_box_plot_callback_handles_exception_without_crashing(caplog):
     with caplog.at_level(logging.ERROR):
         with patch("app.create_box_plot", side_effect=RuntimeError("boom")):
-            figure = update_box_plot(
-                ["Albany"],
-                "organic",
-                "2015-01-01",
-                "2015-12-31",
-                "AveragePrice",
-                "year",
-            )
+            with patch("app.sentry_sdk.capture_exception") as mock_capture:
+                figure = update_box_plot(
+                    ["Albany"],
+                    "organic",
+                    "2015-01-01",
+                    "2015-12-31",
+                    "AveragePrice",
+                    "year",
+                )
 
     assert figure["data"] == []
     assert "error" in figure["layout"]["title"].lower()
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.ERROR
     assert caplog.records[0].exc_info is not None
+    mock_capture.assert_called_once()
+    assert mock_capture.call_args.kwargs["extras"] == {
+        "regions": ["Albany"],
+        "type": "organic",
+        "start_date": "2015-01-01",
+        "end_date": "2015-12-31",
+        "column": "AveragePrice",
+        "group_by": "year",
+    }
 
 
 def test_download_button_and_dcc_download_exist_in_layout():
@@ -862,14 +902,22 @@ def test_download_filtered_csv_returns_no_update_when_no_regions_selected():
 def test_download_filtered_csv_callback_handles_exception_without_crashing(caplog):
     with caplog.at_level(logging.ERROR):
         with patch("app.dcc.send_data_frame", side_effect=RuntimeError("boom")):
-            result = download_filtered_csv(
-                1, ["Albany"], "organic", "2015-01-01", "2015-12-31"
-            )
+            with patch("app.sentry_sdk.capture_exception") as mock_capture:
+                result = download_filtered_csv(
+                    1, ["Albany"], "organic", "2015-01-01", "2015-12-31"
+                )
 
     assert result is no_update
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.ERROR
     assert caplog.records[0].exc_info is not None
+    mock_capture.assert_called_once()
+    assert mock_capture.call_args.kwargs["extras"] == {
+        "regions": ["Albany"],
+        "type": "organic",
+        "start_date": "2015-01-01",
+        "end_date": "2015-12-31",
+    }
 
 
 def test_update_download_controls_disables_button_when_no_data():
@@ -902,15 +950,23 @@ def test_update_download_controls_disables_button_when_no_regions_selected():
 def test_update_download_controls_callback_handles_exception_without_crashing(caplog):
     with caplog.at_level(logging.ERROR):
         with patch("app.filter_data", side_effect=RuntimeError("boom")):
-            disabled, status = update_download_controls(
-                ["Albany"], "organic", "2015-01-01", "2015-12-31"
-            )
+            with patch("app.sentry_sdk.capture_exception") as mock_capture:
+                disabled, status = update_download_controls(
+                    ["Albany"], "organic", "2015-01-01", "2015-12-31"
+                )
 
     assert disabled is True
     assert status != ""
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.ERROR
     assert caplog.records[0].exc_info is not None
+    mock_capture.assert_called_once()
+    assert mock_capture.call_args.kwargs["extras"] == {
+        "regions": ["Albany"],
+        "type": "organic",
+        "start_date": "2015-01-01",
+        "end_date": "2015-12-31",
+    }
 
 
 def test_price_chart_exposes_a_download_as_image_control():
@@ -970,6 +1026,23 @@ def test_chart_modebar_shows_only_the_download_button(chart_id):
     assert graph.config["displaylogo"] is False
     removed = set(graph.config.get("modeBarButtonsToRemove", []))
     assert NON_DOWNLOAD_MODEBAR_BUTTONS <= removed
+
+
+def test_sentry_capture_is_a_no_op_without_a_dsn():
+    sentry_sdk.init(dsn=None)
+
+    assert sentry_sdk.capture_exception(RuntimeError("boom")) is None
+
+
+def test_init_sentry_with_an_invalid_dsn_does_not_raise(monkeypatch):
+    monkeypatch.setenv("SENTRY_DSN", "not-a-valid-dsn")
+    try:
+        init_sentry()
+    except Exception as e:
+        pytest.fail(f"init_sentry() raised with an invalid DSN: {e}")
+    finally:
+        monkeypatch.delenv("SENTRY_DSN", raising=False)
+        sentry_sdk.init(dsn=None)
 
 
 def test_no_print_statements_remain_in_app_source():

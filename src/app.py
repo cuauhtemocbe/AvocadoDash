@@ -5,6 +5,7 @@ import os
 from typing import Any
 
 import pandas as pd
+import sentry_sdk
 from dash import Dash, Input, NoUpdate, Output, State, dcc, html, no_update
 
 import translations
@@ -16,6 +17,13 @@ from utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def report_callback_error(error: Exception, **filters: Any) -> None:
+    """Send a caught callback exception to Sentry with the active filter
+    values attached as extra context. No-ops when SENTRY_DSN is unset."""
+    sentry_sdk.capture_exception(error, extras=filters)
+
 
 TooltipChildren = list[str | html.Span]
 HeaderText = list[str | html.A]
@@ -232,6 +240,28 @@ external_stylesheets = [
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = "Avocado Analytics"
 server = app.server  # This is needed for Railway deployment
+
+
+def init_sentry() -> None:
+    """Initialize Sentry from SENTRY_DSN. Callbacks catch their own
+    exceptions (see each `except` block below), so they never reach Flask
+    as unhandled — Sentry's automatic Flask capture would see nothing.
+    Each callback calls sentry_sdk.capture_exception(e) explicitly
+    alongside its existing logger.error(...) call. With no SENTRY_DSN set,
+    the SDK's capture calls no-op. A malformed SENTRY_DSN makes
+    sentry_sdk.init() itself raise (BadDsn) rather than no-op, so it's
+    guarded here — a bad env var should degrade to "no error reporting",
+    not take the whole app down."""
+    try:
+        sentry_sdk.init(dsn=os.environ.get("SENTRY_DSN"))
+    except Exception:
+        logger.warning(
+            "Invalid SENTRY_DSN; continuing without Sentry error reporting",
+            exc_info=True,
+        )
+
+
+init_sentry()
 
 # Default language on load — the target audience is primarily Spanish-speaking.
 INITIAL_LANG = "es"
@@ -1138,6 +1168,13 @@ def update_summary_panel(
         )
     except Exception as e:
         logger.error(f"Error in summary panel callback: {str(e)}", exc_info=True)
+        report_callback_error(
+            e,
+            regions=regions,
+            type=avocado_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
         error_prefix = translations.t("common.error_prefix", lang)
         return html.Div(f"{error_prefix}: {str(e)}", className="summary-empty")
 
@@ -1168,6 +1205,13 @@ def update_download_controls(
         return False, ""
     except Exception as e:
         logger.error(f"Error in download controls callback: {str(e)}", exc_info=True)
+        report_callback_error(
+            e,
+            regions=regions,
+            type=avocado_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
         error_prefix = translations.t("common.error_prefix", lang)
         return True, f"{error_prefix}: {str(e)}"
 
@@ -1204,6 +1248,13 @@ def download_filtered_csv(
         )
     except Exception as e:
         logger.error(f"Error in download callback: {str(e)}", exc_info=True)
+        report_callback_error(
+            e,
+            regions=regions,
+            type=avocado_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
         return no_update
 
 
@@ -1248,6 +1299,13 @@ def update_charts(
 
     except Exception as e:
         logger.error(f"Error in callback: {str(e)}", exc_info=True)
+        report_callback_error(
+            e,
+            regions=regions,
+            type=avocado_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
         # Return empty figures on error
         error_prefix = translations.t("common.error_prefix", lang)
         error_fig = {"data": [], "layout": {"title": f"{error_prefix}: {str(e)}"}}
@@ -1289,6 +1347,15 @@ def update_scatter_chart(
 
     except Exception as e:
         logger.error(f"Error in scatter chart callback: {str(e)}", exc_info=True)
+        report_callback_error(
+            e,
+            regions=regions,
+            type=avocado_type,
+            start_date=start_date,
+            end_date=end_date,
+            x_col=x_col,
+            y_col=y_col,
+        )
         error_prefix = translations.t("common.error_prefix", lang)
         return {"data": [], "layout": {"title": f"{error_prefix}: {str(e)}"}}
 
@@ -1344,6 +1411,15 @@ def update_box_plot(
 
     except Exception as e:
         logger.error(f"Error in box plot callback: {str(e)}", exc_info=True)
+        report_callback_error(
+            e,
+            regions=regions,
+            type=avocado_type,
+            start_date=start_date,
+            end_date=end_date,
+            column=column,
+            group_by=group_by,
+        )
         error_prefix = translations.t("common.error_prefix", lang)
         return {"data": [], "layout": {"title": f"{error_prefix}: {str(e)}"}}
 
