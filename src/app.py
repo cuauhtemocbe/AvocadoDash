@@ -473,7 +473,7 @@ app.layout = html.Div(
                     children=html.Div(
                         children=dcc.Graph(
                             id="scatter-chart",
-                            config={"displayModeBar": True},
+                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
                         ),
                         className="card",
                         style={"margin": "20px auto", "max-width": "1000px"},
@@ -561,7 +561,7 @@ app.layout = html.Div(
                     children=html.Div(
                         children=dcc.Graph(
                             id="box-plot-chart",
-                            config={"displayModeBar": True},
+                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
                         ),
                         className="card",
                         style={"margin": "20px auto", "max-width": "1000px"},

@@ -943,6 +943,35 @@ def test_box_plot_chart_still_exposes_its_download_control():
     assert graph.config["displayModeBar"] is True
 
 
+NON_DOWNLOAD_MODEBAR_BUTTONS = {
+    "zoom2d",
+    "pan2d",
+    "select2d",
+    "lasso2d",
+    "zoomIn2d",
+    "zoomOut2d",
+    "autoScale2d",
+    "resetScale2d",
+    "hoverClosestCartesian",
+    "hoverCompareCartesian",
+    "toggleSpikelines",
+}
+
+
+@pytest.mark.parametrize(
+    "chart_id",
+    ["price-chart", "volume-chart", "scatter-chart", "box-plot-chart"],
+)
+def test_chart_modebar_shows_only_the_download_button(chart_id):
+    graph = find_component_by_id(app.layout, chart_id)
+
+    assert graph is not None
+    assert graph.config["displayModeBar"] is True
+    assert graph.config["displaylogo"] is False
+    removed = set(graph.config.get("modeBarButtonsToRemove", []))
+    assert NON_DOWNLOAD_MODEBAR_BUTTONS <= removed
+
+
 def test_no_print_statements_remain_in_app_source():
     app_source = Path(__file__).parent.parent.joinpath("src", "app.py").read_text()
 
