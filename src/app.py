@@ -121,6 +121,27 @@ CHART_BG = "#F6F1E4"  # --parchment
 CHART_GRIDCOLOR = "#D8CBAE"  # muted parchment-adjacent tone
 TYPE_COLOR_MAP = {"conventional": "#7C8F3E", "organic": "#B4432E"}  # --flesh / --bruise
 
+# Plotly's default modebar has zoom/pan/select buttons that are inert on
+# these charts (all axes are `fixedrange: True`) — this config keeps only
+# the download-as-image button.
+DOWNLOAD_ONLY_MODEBAR_CONFIG: dcc.Graph.Config = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "modeBarButtonsToRemove": [
+        "zoom2d",
+        "pan2d",
+        "select2d",
+        "lasso2d",
+        "zoomIn2d",
+        "zoomOut2d",
+        "autoScale2d",
+        "resetScale2d",
+        "hoverClosestCartesian",
+        "hoverCompareCartesian",
+        "toggleSpikelines",
+    ],
+}
+
 # Define numeric columns for scatter plot
 numeric_columns = [
     "AveragePrice",
@@ -361,14 +382,14 @@ app.layout = html.Div(
                     html.Div(
                         children=dcc.Graph(
                             id="price-chart",
-                            config={"displayModeBar": False},
+                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
                         ),
                         className="card",
                     ),
                     html.Div(
                         children=dcc.Graph(
                             id="volume-chart",
-                            config={"displayModeBar": False},
+                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
                         ),
                         className="card",
                     ),

@@ -913,6 +913,36 @@ def test_update_download_controls_callback_handles_exception_without_crashing(ca
     assert caplog.records[0].exc_info is not None
 
 
+def test_price_chart_exposes_a_download_as_image_control():
+    graph = find_component_by_id(app.layout, "price-chart")
+
+    assert graph is not None
+    assert graph.config["displayModeBar"] is True
+    assert "toImage" not in graph.config.get("modeBarButtonsToRemove", [])
+
+
+def test_volume_chart_exposes_a_download_as_image_control():
+    graph = find_component_by_id(app.layout, "volume-chart")
+
+    assert graph is not None
+    assert graph.config["displayModeBar"] is True
+    assert "toImage" not in graph.config.get("modeBarButtonsToRemove", [])
+
+
+def test_scatter_chart_still_exposes_its_download_control():
+    graph = find_component_by_id(app.layout, "scatter-chart")
+
+    assert graph is not None
+    assert graph.config["displayModeBar"] is True
+
+
+def test_box_plot_chart_still_exposes_its_download_control():
+    graph = find_component_by_id(app.layout, "box-plot-chart")
+
+    assert graph is not None
+    assert graph.config["displayModeBar"] is True
+
+
 def test_no_print_statements_remain_in_app_source():
     app_source = Path(__file__).parent.parent.joinpath("src", "app.py").read_text()
 
