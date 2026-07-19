@@ -1,0 +1,58 @@
+name: Dependabot Socket Firewall
+
+# Punctual exception to "no hosted CI" (see CLAUDE.md / development-standards.md
+# section 4): human PRs are still validated locally via git hooks + `make validate`.
+# This workflow only covers PRs opened by Dependabot, since those propose
+# third-party dependency bumps that nobody reviews line by line before the bot
+# does. It reinstalls the PR's dependencies through Socket Firewall Free (`sfw`),
+# which blocks known-malicious/compromised packages, and auto-closes the PR if
+# `sfw` flags anything — no human has to remember to check each one by hand.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions: read-all
+
+jobs:
+  socket-check:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Socket Firewall
+        uses: SocketDev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+        with:
+          mode: firewall-free
+
+      # Socket Firewall Free supports pip/uv natively but not poetry directly
+      # (https://docs.socket.dev/docs/socket-firewall-free) — export the PR's
+      # poetry.lock to a plain requirements file so `sfw` has something to wrap.
+      - name: Export dependencies from poetry.lock
+        run: |
+          pip install --quiet poetry poetry-plugin-export
+          poetry export --without-hashes -f requirements.txt -o requirements-pr.txt
+
+      - name: Install through firewall
+        id: install
+        run: sfw pip install --dry-run -r requirements-pr.txt
+        continue-on-error: true
+
+      - name: Close PR if the firewall blocked something
+        if: steps.install.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr close "${{ github.event.pull_request.number }}" \
+            --comment "🚫 Socket Firewall bloqueó esta dependencia por comportamiento malicioso/sospechoso. Cerrado automáticamente."

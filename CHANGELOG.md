@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `make validate` as a single entry point for lint, format-check, typecheck, and test.
 - Secret scanning (staged diff) in the pre-commit hook.
 - This changelog.
+- `dependabot-socket-firewall` CI workflow: runs Socket Firewall Free against Dependabot PRs and auto-closes any PR proposing a known-malicious/compromised dependency.
 
 ### Changed
 
