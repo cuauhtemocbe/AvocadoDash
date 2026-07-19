@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production base image moved from the frozen `python:3.12.6-slim` tag to the actively-maintained `python:3.12-slim` tag, pinned by digest (dev/builder stay on the floating tag).
 - CI's single `lint-and-test` job split into independent `lint` and `test` jobs; workflow now also triggers on push to `main` and declares explicit `permissions: read-all`.
 - Third-party GitHub Actions (`actions/checkout`, `aquasecurity/trivy-action`) pinned by commit SHA instead of floating tags.
+- Dependabot now groups `minor`/`patch` updates per ecosystem (`pip`, `docker`, `github-actions`) into a single PR each; `major` bumps stay ungrouped so they're reviewed individually.
 
 ## [0.1.0] - 2026-07-13
 
