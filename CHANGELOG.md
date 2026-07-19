@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secret scanning (staged diff) in the pre-commit hook.
 - This changelog.
 - `dependabot-socket-firewall` CI workflow: runs Socket Firewall Free against Dependabot PRs and auto-closes any PR proposing a known-malicious/compromised dependency.
+- Slack notification when a Railway deployment fails: a project-level Railway webhook (filtered to the `Deployment Failed` event, no application code) piped through Slack's incoming-webhook Muxer. `scripts/verify_slack_webhook.sh` verifies the Slack side of the wiring on demand.
 
 ### Changed
 
