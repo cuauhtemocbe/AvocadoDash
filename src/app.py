@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 import pandas as pd
 import sentry_sdk
@@ -27,7 +27,19 @@ def report_callback_error(error: Exception, **filters: Any) -> None:
 
 TooltipChildren = list[str | html.Span]
 HeaderText = list[str | html.A]
-DropdownOptions = list[dcc.Dropdown.Options]
+
+
+class Option(TypedDict):
+    """Shape of a dcc.Dropdown/dcc.RadioItems `options` entry. Defined
+    locally rather than via dcc.Dropdown.Options — Dash 4 dropped that
+    nested TypedDict and types `options` as `Any` instead."""
+
+    label: str
+    value: str
+    title: NotRequired[str]
+
+
+DropdownOptions = list[Option]
 
 
 REQUIRED_DATA_COLUMNS = {"Date", "AveragePrice", "Total Volume", "type", "region"}
@@ -266,7 +278,7 @@ init_sentry()
 # Default language on load — the target audience is primarily Spanish-speaking.
 INITIAL_LANG = "es"
 
-LANGUAGE_TOGGLE_OPTIONS: list[dcc.RadioItems.Options] = [
+LANGUAGE_TOGGLE_OPTIONS: list[Option] = [
     {"label": "ES", "value": "es"},
     {"label": "EN", "value": "en"},
 ]
