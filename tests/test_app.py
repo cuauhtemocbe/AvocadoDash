@@ -7,23 +7,37 @@ import pandas as pd
 import pytest
 import sentry_sdk
 from dash import dcc, no_update
+from dash._callback_context import context_value
+from dash._utils import AttributeDict
 
 from app import (
+    DATA_MAX_DATE,
+    DATA_MIN_DATE,
+    DEFAULT_URL_BOX_PLOT_COLUMN,
+    DEFAULT_URL_BOX_PLOT_GROUPBY,
+    DEFAULT_URL_REGIONS,
+    DEFAULT_URL_TYPE,
+    DEFAULT_URL_X_AXIS,
+    DEFAULT_URL_Y_AXIS,
     EMPTY_REGION_MESSAGE,
     REGION_COLOR_PALETTE,
     app,
+    avocado_types,
     create_box_plot,
     create_price_chart,
     create_scatter_chart,
     create_summary_panel,
     create_volume_chart,
     data,
+    decode_query_to_filters,
     download_filtered_csv,
+    encode_filters_to_query,
     external_stylesheets,
     filter_data,
     init_sentry,
     load_data,
     summary_stat_card,
+    sync_url_and_filters,
     update_box_plot,
     update_charts,
     update_download_controls,
@@ -1206,3 +1220,440 @@ def test_update_download_controls_spanish_no_data_message():
 
     assert disabled is True
     assert status == t("download.no_data", "es")
+
+
+# --- Shareable URL state (V1 scope): encode_filters_to_query /
+# decode_query_to_filters — see specs/shareable-url-state.md.
+
+
+def test_encode_filters_to_query_single_region():
+    search = encode_filters_to_query(
+        ["Albany"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        "AveragePrice",
+        "Total Volume",
+        "AveragePrice",
+        "type",
+    )
+
+    assert search == (
+        "?region=Albany&type=organic&start=2015-04-01&end=2018-01-01"
+        "&x=AveragePrice&y=Total+Volume&col=AveragePrice&groupby=type"
+    )
+
+
+def test_encode_filters_to_query_multiple_regions_comma_joined():
+    search = encode_filters_to_query(
+        ["Boston", "Chicago"],
+        "conventional",
+        "2015-04-01",
+        "2016-12-31",
+        "AveragePrice",
+        "Total Volume",
+        "AveragePrice",
+        "type",
+    )
+
+    assert search.startswith("?region=Boston%2CChicago&")
+
+
+def test_encode_filters_to_query_empty_regions():
+    search = encode_filters_to_query(
+        [],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        "AveragePrice",
+        "Total Volume",
+        "AveragePrice",
+        "type",
+    )
+
+    assert search.startswith("?region=&")
+
+
+def test_decode_query_to_filters_full_valid_query_restores_values():
+    filters = decode_query_to_filters(
+        "?region=Boston,Chicago&type=organic&start=2015-04-01&end=2016-12-31"
+        "&x=Total+Bags&y=Small+Bags&col=Large+Bags&groupby=region"
+    )
+
+    assert filters == {
+        "region": ["Boston", "Chicago"],
+        "type": "organic",
+        "start": "2015-04-01",
+        "end": "2016-12-31",
+        "x": "Total Bags",
+        "y": "Small Bags",
+        "col": "Large Bags",
+        "groupby": "region",
+    }
+
+
+def test_decode_query_to_filters_no_query_string_uses_defaults():
+    filters = decode_query_to_filters("")
+
+    assert filters["region"] == DEFAULT_URL_REGIONS
+    assert filters["type"] == DEFAULT_URL_TYPE
+    assert filters["start"] == DATA_MIN_DATE.isoformat()
+    assert filters["end"] == DATA_MAX_DATE.isoformat()
+    assert filters["x"] == DEFAULT_URL_X_AXIS
+    assert filters["y"] == DEFAULT_URL_Y_AXIS
+    assert filters["col"] == DEFAULT_URL_BOX_PLOT_COLUMN
+    assert filters["groupby"] == DEFAULT_URL_BOX_PLOT_GROUPBY
+
+
+def test_decode_query_to_filters_none_search_uses_defaults():
+    filters = decode_query_to_filters(None)
+
+    assert filters["region"] == DEFAULT_URL_REGIONS
+
+
+def test_decode_query_to_filters_partial_query_defaults_missing_fields():
+    filters = decode_query_to_filters("?region=Boston")
+
+    assert filters["region"] == ["Boston"]
+    assert filters["type"] == DEFAULT_URL_TYPE
+    assert filters["start"] == DATA_MIN_DATE.isoformat()
+    assert filters["end"] == DATA_MAX_DATE.isoformat()
+
+
+def test_decode_query_to_filters_all_invalid_regions_falls_back_to_default():
+    filters = decode_query_to_filters("?region=Atlantis&type=organic")
+
+    assert filters["region"] == DEFAULT_URL_REGIONS
+
+
+def test_decode_query_to_filters_mixed_valid_and_invalid_regions_keeps_valid_only():
+    filters = decode_query_to_filters("?region=Boston,Atlantis")
+
+    assert filters["region"] == ["Boston"]
+
+
+def test_decode_query_to_filters_explicit_empty_region_is_preserved():
+    filters = decode_query_to_filters("?region=")
+
+    assert filters["region"] == []
+
+
+def test_decode_query_to_filters_absent_region_key_uses_default():
+    filters = decode_query_to_filters("?type=organic")
+
+    assert filters["region"] == DEFAULT_URL_REGIONS
+
+
+def test_decode_query_to_filters_invalid_type_falls_back_to_default():
+    filters = decode_query_to_filters("?type=avocadoish")
+
+    assert filters["type"] == DEFAULT_URL_TYPE
+    assert filters["type"] in avocado_types
+
+
+def test_decode_query_to_filters_unparseable_dates_fall_back_to_defaults():
+    filters = decode_query_to_filters("?start=not-a-date&end=also-not-a-date")
+
+    assert filters["start"] == DATA_MIN_DATE.isoformat()
+    assert filters["end"] == DATA_MAX_DATE.isoformat()
+
+
+def test_decode_query_to_filters_out_of_range_dates_fall_back_to_defaults():
+    filters = decode_query_to_filters("?start=1999-01-01&end=2999-01-01")
+
+    assert filters["start"] == DATA_MIN_DATE.isoformat()
+    assert filters["end"] == DATA_MAX_DATE.isoformat()
+
+
+# --- V2 scope: scatter axis (x/y) + box-plot column/group-by (col/groupby).
+# Covers issue #47's 3 Gherkin scenarios.
+
+
+def test_decode_query_to_filters_partial_query_defaults_missing_v2_fields():
+    filters = decode_query_to_filters("?region=Boston")
+
+    assert filters["x"] == DEFAULT_URL_X_AXIS
+    assert filters["y"] == DEFAULT_URL_Y_AXIS
+    assert filters["col"] == DEFAULT_URL_BOX_PLOT_COLUMN
+    assert filters["groupby"] == DEFAULT_URL_BOX_PLOT_GROUPBY
+
+
+def test_decode_query_to_filters_invalid_x_axis_falls_back_to_default():
+    filters = decode_query_to_filters("?x=NotARealColumn")
+
+    assert filters["x"] == DEFAULT_URL_X_AXIS
+
+
+def test_decode_query_to_filters_invalid_y_axis_falls_back_to_default():
+    filters = decode_query_to_filters("?y=NotARealColumn")
+
+    assert filters["y"] == DEFAULT_URL_Y_AXIS
+
+
+def test_decode_query_to_filters_invalid_box_plot_column_falls_back_to_default():
+    filters = decode_query_to_filters("?col=NotARealColumn")
+
+    assert filters["col"] == DEFAULT_URL_BOX_PLOT_COLUMN
+
+
+def test_decode_query_to_filters_invalid_groupby_falls_back_to_default():
+    filters = decode_query_to_filters("?groupby=NotARealGroupBy")
+
+    assert filters["groupby"] == DEFAULT_URL_BOX_PLOT_GROUPBY
+
+
+def test_decode_query_to_filters_valid_v2_fields_are_restored():
+    filters = decode_query_to_filters(
+        "?x=Total+Bags&y=Small+Bags&col=Large+Bags&groupby=year"
+    )
+
+    assert filters["x"] == "Total Bags"
+    assert filters["y"] == "Small Bags"
+    assert filters["col"] == "Large Bags"
+    assert filters["groupby"] == "year"
+
+
+def test_url_state_round_trip_settles_after_one_rewrite():
+    """Models the two-dispatch self-trigger the URL-sync callback produces
+    on initial load: a non-canonical query string gets re-encoded once
+    into canonical form, and re-encoding that canonical form again must
+    be a no-op (a fixed point) — otherwise the callback would keep
+    rewriting the URL instead of settling."""
+    non_canonical = (
+        "?type=organic&region=Boston,Chicago&end=2016-12-31&start=2015-04-01"
+        "&groupby=region&col=Large+Bags&y=Small+Bags&x=Total+Bags"
+    )
+
+    decoded_once = decode_query_to_filters(non_canonical)
+    canonical = encode_filters_to_query(
+        decoded_once["region"],
+        decoded_once["type"],
+        decoded_once["start"],
+        decoded_once["end"],
+        decoded_once["x"],
+        decoded_once["y"],
+        decoded_once["col"],
+        decoded_once["groupby"],
+    )
+
+    decoded_twice = decode_query_to_filters(canonical)
+    re_encoded = encode_filters_to_query(
+        decoded_twice["region"],
+        decoded_twice["type"],
+        decoded_twice["start"],
+        decoded_twice["end"],
+        decoded_twice["x"],
+        decoded_twice["y"],
+        decoded_twice["col"],
+        decoded_twice["groupby"],
+    )
+
+    assert re_encoded == canonical
+
+
+# --- sync_url_and_filters callback: drives the real Dash `ctx.triggered_id`
+# mechanism via context_value, the same technique Dash's own test suite
+# uses to unit-test callbacks without a browser. Covers issue #36's 5
+# Gherkin scenarios.
+
+
+def _set_triggered(prop_id: str | None) -> None:
+    """Simulate Dash's callback context for a given trigger. `prop_id=None`
+    models the initial page-load call, where nothing has "triggered" yet
+    (ctx.triggered_id is None) — matching real Dash behavior."""
+    if prop_id is None:
+        context_value.set(AttributeDict(triggered_inputs=[]))
+    else:
+        context_value.set(
+            AttributeDict(triggered_inputs=[{"prop_id": prop_id, "value": None}])
+        )
+
+
+DEFAULT_SYNC_ARGS = (
+    "AveragePrice",  # x-axis-dropdown
+    "Total Volume",  # y-axis-dropdown
+    "AveragePrice",  # box-plot-column
+    "type",  # box-plot-groupby
+)
+
+
+def test_sync_url_and_filters_region_change_updates_url():
+    _set_triggered("region-filter.value")
+
+    result = sync_url_and_filters(
+        None, ["Chicago"], "organic", "2015-04-01", "2018-01-01", *DEFAULT_SYNC_ARGS
+    )
+
+    assert result[0] == (
+        "?region=Chicago&type=organic&start=2015-04-01&end=2018-01-01"
+        "&x=AveragePrice&y=Total+Volume&col=AveragePrice&groupby=type"
+    )
+    assert result[1:] == (no_update,) * 8
+
+
+def test_sync_url_and_filters_url_load_restores_filters():
+    _set_triggered(None)
+
+    result = sync_url_and_filters(
+        "?region=Boston,Chicago&type=organic&start=2015-04-01&end=2016-12-31",
+        ["Albany"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        *DEFAULT_SYNC_ARGS,
+    )
+
+    assert result[0] is no_update
+    assert result[1] == ["Boston", "Chicago"]
+    assert result[2] == "organic"
+    assert result[3] == "2015-04-01"
+    assert result[4] == "2016-12-31"
+    assert result[5] == DEFAULT_URL_X_AXIS
+    assert result[6] == DEFAULT_URL_Y_AXIS
+    assert result[7] == DEFAULT_URL_BOX_PLOT_COLUMN
+    assert result[8] == DEFAULT_URL_BOX_PLOT_GROUPBY
+
+
+def test_sync_url_and_filters_no_query_string_uses_defaults():
+    _set_triggered(None)
+
+    result = sync_url_and_filters(
+        "",
+        ["Chicago"],
+        "conventional",
+        "2015-04-01",
+        "2018-01-01",
+        *DEFAULT_SYNC_ARGS,
+    )
+
+    assert result[1] == DEFAULT_URL_REGIONS
+    assert result[2] == DEFAULT_URL_TYPE
+    assert result[3] == DATA_MIN_DATE.isoformat()
+    assert result[4] == DATA_MAX_DATE.isoformat()
+
+
+def test_sync_url_and_filters_invalid_region_falls_back_to_default():
+    _set_triggered(None)
+
+    result = sync_url_and_filters(
+        "?region=Atlantis&type=organic",
+        ["Chicago"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        *DEFAULT_SYNC_ARGS,
+    )
+
+    assert result[1] == DEFAULT_URL_REGIONS
+
+
+def test_sync_url_and_filters_repeated_identical_state_is_idempotent():
+    """Issue #36's loop-safety scenario: once url.search already matches
+    the current filter state, re-dispatching must return no_update for
+    url.search, not rewrite it — this is what prevents an update loop
+    between the URL and the filters."""
+    _set_triggered("region-filter.value")
+    current_search = (
+        "?region=Chicago&type=organic&start=2015-04-01&end=2018-01-01"
+        "&x=AveragePrice&y=Total+Volume&col=AveragePrice&groupby=type"
+    )
+
+    result = sync_url_and_filters(
+        current_search,
+        ["Chicago"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        *DEFAULT_SYNC_ARGS,
+    )
+
+    assert result == (no_update,) * 9
+
+
+def test_sync_url_and_filters_settles_after_initial_load_self_trigger():
+    """Models the two-dispatch self-trigger from a non-canonical query
+    string on page load (see Dry-Run Review Gate findings in
+    specs/shareable-url-state.md): dispatch 1 (triggered by the URL)
+    parses filters; dispatch 2 (self-triggered because those filter
+    values are also this callback's own Inputs) must rebuild the exact
+    same canonical URL and therefore no_update it, not loop further."""
+    non_canonical = (
+        "?type=organic&region=Boston,Chicago&end=2016-12-31&start=2015-04-01"
+        "&x=AveragePrice&y=Total+Volume&col=AveragePrice&groupby=type"
+    )
+
+    _set_triggered(None)
+    dispatch_1 = sync_url_and_filters(
+        non_canonical,
+        ["Albany"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        *DEFAULT_SYNC_ARGS,
+    )
+    assert dispatch_1[0] is no_update
+
+    _set_triggered("region-filter.value")
+    dispatch_2 = sync_url_and_filters(non_canonical, *dispatch_1[1:])
+    canonical = dispatch_2[0]
+    assert canonical != non_canonical  # confirms it's genuinely re-canonicalized
+
+    _set_triggered("region-filter.value")
+    dispatch_3 = sync_url_and_filters(canonical, *dispatch_1[1:])
+    assert dispatch_3[0] is no_update  # settled — no further rewrite
+
+
+def test_sync_url_and_filters_scatter_axis_change_updates_url():
+    _set_triggered("x-axis-dropdown.value")
+
+    result = sync_url_and_filters(
+        None,
+        ["Albany"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        "Total Bags",
+        "Total Volume",
+        "AveragePrice",
+        "type",
+    )
+
+    assert "x=Total+Bags" in result[0]
+    assert result[1:] == (no_update,) * 8
+
+
+def test_sync_url_and_filters_box_plot_column_and_groupby_change_updates_url():
+    _set_triggered("box-plot-groupby.value")
+
+    result = sync_url_and_filters(
+        None,
+        ["Albany"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        "AveragePrice",
+        "Total Volume",
+        "Small Bags",
+        "region",
+    )
+
+    assert "col=Small+Bags" in result[0]
+    assert "groupby=region" in result[0]
+
+
+def test_sync_url_and_filters_url_load_restores_chart_selections():
+    _set_triggered(None)
+
+    result = sync_url_and_filters(
+        "?x=Large+Bags&y=XLarge+Bags&col=Total+Bags&groupby=year",
+        ["Albany"],
+        "organic",
+        "2015-04-01",
+        "2018-01-01",
+        *DEFAULT_SYNC_ARGS,
+    )
+
+    assert result[5] == "Large Bags"
+    assert result[6] == "XLarge Bags"
+    assert result[7] == "Total Bags"
+    assert result[8] == "year"

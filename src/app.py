@@ -2,11 +2,13 @@
 
 import logging
 import os
+from datetime import date
 from typing import Any, NotRequired, TypedDict
+from urllib.parse import parse_qs, urlencode
 
 import pandas as pd
 import sentry_sdk
-from dash import Dash, Input, NoUpdate, Output, State, dcc, html, no_update
+from dash import Dash, Input, NoUpdate, Output, State, ctx, dcc, html, no_update
 
 import translations
 from utils import (
@@ -226,6 +228,9 @@ def build_numeric_column_options(lang: str) -> DropdownOptions:
     ]
 
 
+GROUPBY_VALUES = ("type", "region", "year")
+
+
 def build_groupby_options(lang: str) -> DropdownOptions:
     return [
         {
@@ -233,7 +238,7 @@ def build_groupby_options(lang: str) -> DropdownOptions:
             "value": value,
             "title": translations.groupby_tooltip(value, lang),
         }
-        for value in ("type", "region", "year")
+        for value in GROUPBY_VALUES
     ]
 
 
@@ -287,8 +292,131 @@ REGION_FILTER_OPTIONS: DropdownOptions = [
     {"label": region, "value": region} for region in regions
 ]
 
+# Shareable-URL state. V1 scope: top filter bar (region/type/date-range).
+# V2 scope: scatter axes + box-plot column/group-by. See
+# specs/shareable-url-state.md.
+DEFAULT_URL_REGIONS = ["Albany"]
+DEFAULT_URL_TYPE = "organic"
+DEFAULT_URL_X_AXIS = "AveragePrice"
+DEFAULT_URL_Y_AXIS = "Total Volume"
+DEFAULT_URL_BOX_PLOT_COLUMN = "AveragePrice"
+DEFAULT_URL_BOX_PLOT_GROUPBY = "type"
+DATA_MIN_DATE = data["Date"].min().date()
+DATA_MAX_DATE = data["Date"].max().date()
+URL_STATE_PARAM_ORDER = (
+    "region",
+    "type",
+    "start",
+    "end",
+    "x",
+    "y",
+    "col",
+    "groupby",
+)
+
+
+def encode_filters_to_query(
+    regions: list[str],
+    avocado_type: str,
+    start_date: str,
+    end_date: str,
+    x_axis: str,
+    y_axis: str,
+    box_plot_column: str,
+    box_plot_groupby: str,
+) -> str:
+    """Build the shareable-URL query string for the top filter bar (V1)
+    plus the scatter axis and box-plot column/group-by selections (V2).
+    Param order is fixed (not dict/kwargs iteration order) so this is a
+    fixed point of decode_query_to_filters — required so the URL-sync
+    callback's self-triggered re-encode on page load settles instead of
+    rewriting the URL on every unrelated filter change."""
+    params = {
+        "region": ",".join(regions),
+        "type": avocado_type,
+        "start": start_date,
+        "end": end_date,
+        "x": x_axis,
+        "y": y_axis,
+        "col": box_plot_column,
+        "groupby": box_plot_groupby,
+    }
+    return "?" + urlencode({key: params[key] for key in URL_STATE_PARAM_ORDER})
+
+
+def _parse_date_param(value: str | None, default: date) -> str:
+    if value is None:
+        return default.isoformat()
+    try:
+        parsed_date = pd.Timestamp(value).date()
+    except (ValueError, TypeError):
+        return default.isoformat()
+    if not (DATA_MIN_DATE <= parsed_date <= DATA_MAX_DATE):
+        return default.isoformat()
+    return parsed_date.isoformat()
+
+
+def _parse_choice_param(
+    value: str | None, valid_values: list[str] | tuple[str, ...], default: str
+) -> str:
+    if value is None or value not in valid_values:
+        return default
+    return value
+
+
+def decode_query_to_filters(search: str | None) -> dict[str, Any]:
+    """Parse `url.search` into resolved filter values for the top filter
+    bar (V1) plus the scatter axis and box-plot column/group-by
+    selections (V2), falling back to each field's default when a value
+    is absent or invalid. Uses keep_blank_values=True so an explicitly
+    empty `region` (`?region=`) — "zero regions selected", a state the
+    app already supports via the empty-state figure — is distinguishable
+    from `region` being absent entirely, which means "use the default"."""
+    parsed = parse_qs((search or "").lstrip("?"), keep_blank_values=True)
+
+    if "region" in parsed:
+        raw_regions = [r for r in parsed["region"][0].split(",") if r]
+        valid_regions = [r for r in raw_regions if r in regions]
+        if not raw_regions:
+            resolved_regions = []
+        elif not valid_regions:
+            resolved_regions = list(DEFAULT_URL_REGIONS)
+        else:
+            resolved_regions = valid_regions
+    else:
+        resolved_regions = list(DEFAULT_URL_REGIONS)
+
+    avocado_type = parsed.get("type", [DEFAULT_URL_TYPE])[0]
+    if avocado_type not in avocado_types:
+        avocado_type = DEFAULT_URL_TYPE
+
+    return {
+        "region": resolved_regions,
+        "type": avocado_type,
+        "start": _parse_date_param(parsed.get("start", [None])[0], DATA_MIN_DATE),
+        "end": _parse_date_param(parsed.get("end", [None])[0], DATA_MAX_DATE),
+        "x": _parse_choice_param(
+            parsed.get("x", [None])[0], numeric_columns, DEFAULT_URL_X_AXIS
+        ),
+        "y": _parse_choice_param(
+            parsed.get("y", [None])[0], numeric_columns, DEFAULT_URL_Y_AXIS
+        ),
+        "col": _parse_choice_param(
+            parsed.get("col", [None])[0],
+            numeric_columns,
+            DEFAULT_URL_BOX_PLOT_COLUMN,
+        ),
+        "groupby": _parse_choice_param(
+            parsed.get("groupby", [None])[0],
+            GROUPBY_VALUES,
+            DEFAULT_URL_BOX_PLOT_GROUPBY,
+        ),
+    }
+
+
 app.layout = html.Div(
     children=[
+        dcc.Location(id="url", refresh=False),
         html.Div(
             children=[
                 dcc.RadioItems(
@@ -1151,6 +1279,87 @@ def update_ui_language(
         ),
         build_groupby_options(lang),
     )
+
+
+@app.callback(
+    Output("url", "search"),
+    Output("region-filter", "value"),
+    Output("type-filter", "value"),
+    Output("date-range", "start_date"),
+    Output("date-range", "end_date"),
+    Output("x-axis-dropdown", "value"),
+    Output("y-axis-dropdown", "value"),
+    Output("box-plot-column", "value"),
+    Output("box-plot-groupby", "value"),
+    Input("url", "search"),
+    Input("region-filter", "value"),
+    Input("type-filter", "value"),
+    Input("date-range", "start_date"),
+    Input("date-range", "end_date"),
+    Input("x-axis-dropdown", "value"),
+    Input("y-axis-dropdown", "value"),
+    Input("box-plot-column", "value"),
+    Input("box-plot-groupby", "value"),
+)
+def sync_url_and_filters(
+    url_search: str | None,
+    regions_value: list[str] | None,
+    avocado_type: str | None,
+    start_date: str | None,
+    end_date: str | None,
+    x_axis: str | None,
+    y_axis: str | None,
+    box_plot_column: str | None,
+    box_plot_groupby: str | None,
+) -> tuple[
+    str | NoUpdate,
+    list[str] | NoUpdate,
+    str | NoUpdate,
+    str | NoUpdate,
+    str | NoUpdate,
+    str | NoUpdate,
+    str | NoUpdate,
+    str | NoUpdate,
+    str | NoUpdate,
+]:
+    """Bidirectional sync between the shareable URL query string and: the
+    top filter bar — region/type/date-range (V1) — plus the scatter axis
+    and box-plot column/group-by dropdowns (V2). See
+    specs/shareable-url-state.md. One combined callback, not two
+    cross-referencing ones: `url.search` is deliberately both an Output
+    and an Input of this same callback. Two separate callbacks each
+    taking the other's Output as its Input would instead form a static
+    two-node cycle that Dash rejects at startup with
+    CircularDependencyException — verified not to be an issue for this
+    self-referencing, single-callback shape against this repo's Dash
+    version (see specs/shareable-url-state-plan.md Task 1)."""
+    if ctx.triggered_id in (None, "url"):
+        filters = decode_query_to_filters(url_search)
+        return (
+            no_update,
+            filters["region"],
+            filters["type"],
+            filters["start"],
+            filters["end"],
+            filters["x"],
+            filters["y"],
+            filters["col"],
+            filters["groupby"],
+        )
+
+    new_search = encode_filters_to_query(
+        regions_value or [],
+        avocado_type or DEFAULT_URL_TYPE,
+        start_date or DATA_MIN_DATE.isoformat(),
+        end_date or DATA_MAX_DATE.isoformat(),
+        x_axis or DEFAULT_URL_X_AXIS,
+        y_axis or DEFAULT_URL_Y_AXIS,
+        box_plot_column or DEFAULT_URL_BOX_PLOT_COLUMN,
+        box_plot_groupby or DEFAULT_URL_BOX_PLOT_GROUPBY,
+    )
+    if new_search == url_search:
+        return (no_update,) * 9
+    return (new_search,) + (no_update,) * 8
 
 
 @app.callback(
