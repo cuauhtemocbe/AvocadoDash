@@ -139,13 +139,22 @@ surface for no clear user benefit.
       Input("box-plot-column", "value"),
       Input("box-plot-groupby", "value"),
   )
-  def sync_url_and_filters(url_search, regions, avocado_type, start_date,
-                            end_date, x, y, col, groupby):
+  def sync_url_and_filters(
+      url_search, regions, avocado_type, start_date, end_date, x, y, col, groupby
+  ):
       if ctx.triggered_id in (None, "url"):
           parsed = decode_query_to_filters(url_search)
-          return (no_update, parsed["region"], parsed["type"],
-                  parsed["start"], parsed["end"], parsed["x"], parsed["y"],
-                  parsed["col"], parsed["groupby"])
+          return (
+              no_update,
+              parsed["region"],
+              parsed["type"],
+              parsed["start"],
+              parsed["end"],
+              parsed["x"],
+              parsed["y"],
+              parsed["col"],
+              parsed["groupby"],
+          )
       new_search = encode_filters_to_query(
           regions, avocado_type, start_date, end_date, x, y, col, groupby
       )
