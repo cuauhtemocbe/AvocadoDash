@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS base
+FROM python:3.14-slim AS base
 
 # Set working directory
 WORKDIR /app
@@ -51,7 +51,7 @@ CMD ["poetry", "run", "python", "src/app.py"]
 # not a frozen historical patch tag like `python:3.12.6-slim` — the latter
 # stops receiving OS security patches once superseded, so pinning its digest
 # just freezes in known CVEs instead of freezing in a known-good state. ---
-FROM python:3.12-slim@sha256:c3d81d25b3154142b0b42eb1e61300024426268edeb5b5a26dd7ddf64d9daf28 AS production
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS production
 
 WORKDIR /app
 
