@@ -58,10 +58,18 @@ before the secret would actually leave the machine on commit.
 to pass before a PR can merge — `build` is deliberately excluded from that
 list since it only runs on push to `main` (`if: github.event_name ==
 'push'`), so it would never report a status on a PR and would block merges
-forever if required there. `enforce_admins` is disabled: the repo owner
-(single maintainer, low-traffic project) can still push directly to `main`
-when that makes sense — an explicit, documented exception, not a
-misconfiguration.
+forever if required there. Branch protection also requires `Socket
+Security: Project Report` and `Socket Security: Pull Request Alerts` —
+these come from the Socket Security GitHub App (`github.com/apps/socket-
+security`), installed account-wide with no per-repo config or
+`socket.yml`, not from a workflow in this repo; it scans every
+dependency-touching PR (including Dependabot's own) for supply-chain risk
+(malware, typosquatting, suspicious install scripts) — a different signal
+from Dependabot's version-currency checks or the `dependabot-socket-
+firewall.yml` workflow's install-time firewall check. `enforce_admins` is
+disabled: the repo owner (single maintainer, low-traffic project) can
+still push directly to `main` when that makes sense — an explicit,
+documented exception, not a misconfiguration.
 
 The primary dev workflow is `make run`: code stays on the host (edit with
 any local editor/IDE) while the app actually runs inside the container,
