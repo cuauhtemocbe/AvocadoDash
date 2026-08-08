@@ -1,6 +1,6 @@
 # Documented exceptions for Trivy findings.
 #
-# The entries below are OS-level packages inherited from the python:3.12-slim
+# The entries below are OS-level packages inherited from the python:3.13-slim
 # base image (perl, util-linux/mount/ncurses/gzip/acl utilities) — none of
 # them are installed or invoked by the app at runtime (production doesn't
 # even run apt-get; see Dockerfile). All have status "affected"/"fix_deferred"
