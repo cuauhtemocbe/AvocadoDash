@@ -1,6 +1,6 @@
 # 🥑 AvocadoDash
 
-[![Python](https://img.shields.io/badge/Python-3.12.6-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.13.14-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Dash](https://img.shields.io/badge/Dash-3.2.0-00C7B7?logo=plotly&logoColor=white)](https://dash.plotly.com/)
 [![Pandas](https://img.shields.io/badge/Pandas-2.3.2-150458?logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Poetry](https://img.shields.io/badge/Poetry-deps-60A5FA?logo=poetry&logoColor=white)](https://python-poetry.org/)
@@ -29,7 +29,7 @@ Construido con **Python Dash**, incluye múltiples tipos de visualizaciones para
 
 ## 🛠️ Tecnologías
 
-- **Python 3.12.6** – Lenguaje principal  
+- **Python 3.13.14** – Lenguaje principal  
 - **Dash 3.2.0** – Framework para aplicaciones web con Python  
 - **Pandas 2.3.2** – Manipulación y análisis de datos  
 - **Plotly** – Librería de gráficos interactivos (integrada en Dash)  

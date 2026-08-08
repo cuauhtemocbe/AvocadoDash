@@ -10,10 +10,10 @@ dataset). It is deployed on Railway.
 
 ## Commands
 
-Dependency management is via Poetry (Python constrained to `>=3.12,<3.13`
-in `pyproject.toml`; the Docker base image tracks `python:3.12-slim`,
-currently resolving to 3.12.13 — see the digest-pinning note below for why
-it's not pinned to an older patch like `3.12.6`).
+Dependency management is via Poetry (Python constrained to `>=3.13,<3.14`
+in `pyproject.toml`; the Docker base image tracks `python:3.13-slim`,
+currently resolving to 3.13.14 — see the digest-pinning note below for why
+it's not pinned to an older patch like `3.13.0`).
 Most of these are wrapped by the `Makefile` — run `make help` for the full list.
 
 ```bash
@@ -34,7 +34,7 @@ docker run -p 8050:8050 avocado-dash  # or: make docker-run
 ```
 
 Ruff (`[tool.ruff]` in `pyproject.toml`) is the linter and formatter — line
-length 88, target `py312`. Pytest is configured with `pythonpath = ["src"]`
+length 88, target `py313`. Pytest is configured with `pythonpath = ["src"]`
 so tests import `app` directly (see `tests/test_app.py`). `addopts` in
 `[tool.pytest.ini_options]` enables `pytest-cov` on every `make test` run,
 enforcing `--cov-fail-under=80` (a global floor, not tiered by module —
@@ -86,13 +86,13 @@ non-debug.
 pattern, but against `avocadodash:dev` (built by `make docker-build-dev`)
 instead of `avocadodash:latest` — that's the only image with the `dev`
 dependency group (`ruff`, `pytest`) installed, since the Dockerfile has
-four stages: a shared `base` (`FROM python:3.12-slim`, floating tag), a
+four stages: a shared `base` (`FROM python:3.13-slim`, floating tag), a
 `builder` stage that resolves dependencies into an in-project venv
 (`poetry install --no-root --only main`), a `dev` stage (also `FROM
 base`, full `poetry install --no-root` with dev deps, used by
 `test`/`lint`/`format*`), and `production` (the default build target).
 `production` does **not** extend `base` — it starts its own `FROM
-python:3.12-slim@sha256:...` pinned by digest, then copies only
+python:3.13-slim@sha256:...` pinned by digest, then copies only
 `builder`'s venv and `src/`, so the final image has no `poetry`/`git`
 installed and runs as a non-root `appuser` with a `HEALTHCHECK` against
 `/`. This pinning asymmetry is deliberate: `base` (used by `dev`/`builder`)
@@ -101,12 +101,13 @@ automatically, while `production` pins by digest for byte-for-byte
 reproducible builds — bump the digest manually (or let Dependabot open
 the PR) when moving to a new Python patch version, don't revert it to a
 floating tag "to match dev". Use a tag that's still being actively
-rebuilt (`python:3.12-slim`) for both, not a frozen historical patch tag
-like `python:3.12.6-slim` — once superseded, those stop receiving OS
+rebuilt (`python:3.13-slim`) for both, not a frozen historical patch tag
+like `python:3.13.0-slim` — once superseded, those stop receiving OS
 security patches, so pinning their digest just freezes in known CVEs
-(verified with Trivy: `3.12.6-slim` carried 72 CRITICAL/HIGH findings vs.
-11 on current `3.12-slim`, the rest fixed simply by tracking a
-maintained tag).
+(verified with Trivy on the 3.12 series: `3.12.6-slim` carried 72
+CRITICAL/HIGH findings vs. 11 on the actively-maintained `3.12-slim` tag,
+the rest fixed simply by tracking a maintained tag — the same dynamic
+applies across Python series, including 3.13).
 
 Both `make run` and the `test`/`lint`/`format*` targets bind-mount the
 repo into the container, so they always operate on the current code — but
