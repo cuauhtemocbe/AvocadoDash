@@ -46,7 +46,12 @@ from app import (
     update_ui_language,
 )
 from translations import column_label, t
-from utils import calculate_price_change, find_region_extremes, format_number
+from utils import (
+    calculate_price_change,
+    detect_price_anomalies,
+    find_region_extremes,
+    format_number,
+)
 
 CONTROL_LABEL_IDS = [
     "region-filter-label",
@@ -268,6 +273,13 @@ def test_filter_data_returns_empty_for_no_regions():
     assert result.empty
 
 
+def region_traces_only(figure):
+    """A price chart's `data` can include anomaly-marker traces (issue
+    #39) alongside the per-region lines — filter those out for
+    assertions that are specifically about the region lines."""
+    return [trace for trace in figure["data"] if trace.get("legendgroup") != "anomaly"]
+
+
 def test_create_price_chart_returns_plotly_figure_dict():
     figure = create_price_chart(data.head(50))
 
@@ -280,23 +292,140 @@ def test_create_price_chart_single_region_returns_one_named_trace():
     filtered = filter_data(["Albany"], "organic", "2015-01-01", "2015-12-31")
 
     figure = create_price_chart(filtered)
+    region_traces = region_traces_only(figure)
 
-    assert len(figure["data"]) == 1
-    assert figure["data"][0]["name"] == "Albany"
-    assert list(figure["data"][0]["y"]) == list(filtered["AveragePrice"])
-    assert figure["layout"]["showlegend"] is False
+    assert len(region_traces) == 1
+    assert region_traces[0]["name"] == "Albany"
+    assert list(region_traces[0]["y"]) == list(filtered["AveragePrice"])
 
 
 def test_create_price_chart_multiple_regions_returns_one_trace_per_region():
     filtered = filter_data(["Albany", "Chicago"], "organic", "2015-01-01", "2015-12-31")
 
     figure = create_price_chart(filtered)
+    region_traces = region_traces_only(figure)
 
-    assert {trace["name"] for trace in figure["data"]} == {"Albany", "Chicago"}
+    assert {trace["name"] for trace in region_traces} == {"Albany", "Chicago"}
     assert figure["layout"]["showlegend"] is True
-    for trace in figure["data"]:
+    for trace in region_traces:
         region_rows = filtered[filtered["region"] == trace["name"]]
         assert list(trace["y"]) == list(region_rows["AveragePrice"])
+
+
+# --- Price anomaly detection (issue #39) --------------------------------
+
+
+@pytest.mark.parametrize(
+    "prices,expected",
+    [
+        # mean=1.0, std=0.1 (population). Only the 1.5 point (5 std away)
+        # is beyond the 2.0 threshold.
+        (
+            pd.Series([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5]),
+            [False] * 9 + [True],
+        ),
+        # No point beyond 2 std: near-uniform noise around 1.0.
+        (pd.Series([0.95, 1.0, 1.05, 0.98, 1.02, 1.0, 0.97, 1.03]), [False] * 8),
+    ],
+)
+def test_detect_price_anomalies_flags_points_beyond_threshold(prices, expected):
+    result = detect_price_anomalies(prices)
+    assert list(result) == expected
+
+
+def test_detect_price_anomalies_boundary_exactly_at_threshold_is_not_flagged():
+    """9 copies of `a` + 1 copy of `b` always puts the odd point at
+    exactly (n-1)/sqrt(n) standard deviations from the series' own
+    mean, regardless of the gap between `a` and `b` (scale-invariant).
+    Using that exact ratio as the threshold directly exercises the
+    strict `>` (not `>=`) boundary rule."""
+    prices = pd.Series([1.0] * 9 + [1.2])
+    exact_ratio = (prices - prices.mean()).abs().iloc[-1] / prices.std()
+
+    result = detect_price_anomalies(prices, std_threshold=exact_ratio)
+
+    assert result.iloc[-1] == False  # noqa: E712 — pandas bool, not Python bool
+
+
+def test_detect_price_anomalies_just_beyond_threshold_is_flagged():
+    prices = pd.Series([1.0] * 9 + [1.2])
+    exact_ratio = (prices - prices.mean()).abs().iloc[-1] / prices.std()
+
+    result = detect_price_anomalies(prices, std_threshold=exact_ratio - 1e-9)
+
+    assert result.iloc[-1] == True  # noqa: E712 — pandas bool, not Python bool
+
+
+def test_detect_price_anomalies_single_point_does_not_crash():
+    result = detect_price_anomalies(pd.Series([1.5]))
+    assert list(result) == [False]
+
+
+def test_detect_price_anomalies_flat_series_has_no_anomalies():
+    """std == 0 (every value identical) must not divide by zero."""
+    result = detect_price_anomalies(pd.Series([1.0, 1.0, 1.0, 1.0]))
+    assert list(result) == [False] * 4
+
+
+def test_create_price_chart_flags_an_anomalous_point_with_a_distinct_marker():
+    filtered = filter_data(["Albany"], "organic", "2015-01-01", "2015-12-31")
+
+    figure = create_price_chart(filtered)
+    anomaly_traces = [
+        trace for trace in figure["data"] if trace.get("legendgroup") == "anomaly"
+    ]
+
+    assert len(anomaly_traces) == 1
+    assert anomaly_traces[0]["marker"]["symbol"] == "x"
+    assert anomaly_traces[0]["mode"] == "markers"
+    assert anomaly_traces[0]["showlegend"] is True
+    assert figure["layout"]["showlegend"] is True
+
+
+def test_create_price_chart_renders_without_markers_when_no_anomalies():
+    # Two points can never be > 2 std from their own mean (equidistant).
+    filtered = filter_data(["Albany"], "organic", "2015-01-04", "2015-01-11")
+
+    figure = create_price_chart(filtered)
+    anomaly_traces = [
+        trace for trace in figure["data"] if trace.get("legendgroup") == "anomaly"
+    ]
+
+    assert anomaly_traces == []
+
+
+def test_create_price_chart_multiple_regions_share_one_anomaly_legend_entry():
+    filtered = filter_data(["Albany", "Chicago"], "organic", "2015-01-01", "2015-12-31")
+
+    figure = create_price_chart(filtered)
+    anomaly_traces = [
+        trace for trace in figure["data"] if trace.get("legendgroup") == "anomaly"
+    ]
+
+    assert len(anomaly_traces) == 2
+    assert [trace["showlegend"] for trace in anomaly_traces] == [True, False]
+
+
+def test_create_price_chart_single_data_point_does_not_crash():
+    filtered = filter_data(["Albany"], "organic", "2015-01-04", "2015-01-04")
+
+    figure = create_price_chart(filtered)
+    anomaly_traces = [
+        trace for trace in figure["data"] if trace.get("legendgroup") == "anomaly"
+    ]
+
+    assert anomaly_traces == []
+
+
+def test_update_charts_empty_filtered_data_skips_anomaly_logic():
+    """Issue #39's empty-dataset scenario: the existing empty-state
+    figure is returned and anomaly logic is never invoked (already true
+    since update_charts short-circuits before calling create_price_chart
+    at all — this just locks that path in for the anomaly feature)."""
+    price_fig, _ = update_charts(["Albany"], "organic", "1999-01-01", "1999-12-31")
+
+    assert price_fig["data"] == []
+    assert "no data available" in price_fig["layout"]["title"].lower()
 
 
 def find_info_icon(component):
@@ -703,7 +832,7 @@ def test_region_line_palette_is_unchanged_by_the_chart_chrome_recolor():
 
     figure = create_price_chart(filtered)
 
-    trace_colors = {trace["line"]["color"] for trace in figure["data"]}
+    trace_colors = {trace["line"]["color"] for trace in region_traces_only(figure)}
     assert trace_colors <= set(REGION_COLOR_PALETTE)
 
 
@@ -723,7 +852,7 @@ def test_region_line_palette_is_reused_unchanged_in_dark_mode():
 
     figure = create_price_chart(filtered, theme="dark")
 
-    trace_colors = {trace["line"]["color"] for trace in figure["data"]}
+    trace_colors = {trace["line"]["color"] for trace in region_traces_only(figure)}
     assert trace_colors <= set(REGION_COLOR_PALETTE)
 
 
@@ -748,7 +877,8 @@ def test_update_charts_shows_one_line_per_selected_region():
         ["Albany", "Chicago"], "organic", "2015-01-01", "2015-12-31"
     )
 
-    assert {trace["name"] for trace in price_fig["data"]} == {"Albany", "Chicago"}
+    price_region_names = {trace["name"] for trace in region_traces_only(price_fig)}
+    assert price_region_names == {"Albany", "Chicago"}
     assert {trace["name"] for trace in volume_fig["data"]} == {"Albany", "Chicago"}
 
 
@@ -757,9 +887,10 @@ def test_update_charts_single_region_behaves_like_before():
         ["Albany"], "organic", "2015-01-01", "2015-12-31"
     )
 
-    assert len(price_fig["data"]) == 1
+    price_region_traces = region_traces_only(price_fig)
+    assert len(price_region_traces) == 1
     assert len(volume_fig["data"]) == 1
-    assert price_fig["data"][0]["name"] == "Albany"
+    assert price_region_traces[0]["name"] == "Albany"
     assert volume_fig["data"][0]["name"] == "Albany"
 
 
