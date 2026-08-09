@@ -87,12 +87,18 @@ def filter_data(
 EMPTY_REGION_MESSAGE = translations.t("empty.select_region", "en")
 
 
-def empty_state_figure(message: str, lang: str = "en") -> dict[str, Any]:
+def empty_state_figure(
+    message: str, lang: str = "en", theme: str = "light"
+) -> dict[str, Any]:
     """Empty Plotly figure with a centered annotation explaining why."""
+    chart_bg, _, text_color = _chart_chrome(theme)
     return {
         "data": [],
         "layout": {
             "title": translations.t("empty.no_data_filters", lang),
+            "plot_bgcolor": chart_bg,
+            "paper_bgcolor": chart_bg,
+            "font": {"color": text_color},
             "annotations": [
                 {
                     "text": message,
@@ -114,17 +120,31 @@ regions = sorted(data["region"].unique())
 avocado_types = sorted(data["type"].unique())
 
 # Categorical palette for per-region chart lines (validated with the
-# /dataviz skill: 8 hues, worst adjacent CVD ΔE 24.2). Colors are assigned
-# per chart render, in the fixed order below, to whichever regions are
-# currently selected (not pre-assigned per region across the full ~50-region
-# roster) — with only 8 well-separated hues, a fixed global assignment would
-# alias two arbitrary regions onto the same color as soon as they're 8 apart
-# alphabetically (e.g. "Albany" and "Chicago" both selected). Since a single
-# chart realistically compares a handful of regions at once, keying color to
-# the current selection's order guarantees distinct colors for any 2-8
-# regions shown together, at the cost of a region's color shifting if the
-# selection changes — an acceptable trade-off here since the legend and
-# hover tooltip always name the region directly (never color-only identity).
+# /dataviz skill: 8 hues, worst adjacent CVD ΔE 24.2 against the light
+# --parchment chart background). Colors are assigned per chart render, in
+# the fixed order below, to whichever regions are currently selected (not
+# pre-assigned per region across the full ~50-region roster) — with only 8
+# well-separated hues, a fixed global assignment would alias two arbitrary
+# regions onto the same color as soon as they're 8 apart alphabetically
+# (e.g. "Albany" and "Chicago" both selected). Since a single chart
+# realistically compares a handful of regions at once, keying color to the
+# current selection's order guarantees distinct colors for any 2-8 regions
+# shown together, at the cost of a region's color shifting if the selection
+# changes — an acceptable trade-off here since the legend and hover
+# tooltip always name the region directly (never color-only identity).
+#
+# Re-validated for dark mode (issue #51) with `/dataviz`'s
+# validate_palette.js against the new #241C13 dark chart surface, reusing
+# these same 8 hues unchanged:
+#   - CVD separation is surface-independent — worst adjacent pair
+#     (#eda100↔#1baf7a) is ΔE 9.1 (protan)/7.6 (tritan) in BOTH modes,
+#     identical output from the validator either way.
+#   - Contrast vs. surface: only 1 of 8 hues (#4a3aa7, violet) falls below
+#     the 3:1 relief-required band against the dark surface, vs. 4 of 8
+#     against the light surface — dark mode clears the same bar light
+#     mode already shipped with room to spare. Relief is already in place
+#     either way: the legend and hover tooltip always name the region.
+# Net result: no hex values needed to change for dark mode.
 REGION_COLOR_PALETTE = [
     "#2a78d6",  # blue
     "#1baf7a",  # aqua
@@ -138,10 +158,32 @@ REGION_COLOR_PALETTE = [
 
 # Chart chrome — same design tokens as style.css, duplicated here because
 # Plotly figure dicts render via JS/canvas and can't reference CSS custom
-# properties.
+# properties. Dark-mode counterparts (issue #45) mirror style.css's
+# --parchment dark-mode value. TYPE_COLOR_MAP (below) was also re-run
+# through validate_palette.js against the dark surface for #51: all
+# checks (lightness band, chroma floor, contrast) pass unchanged with the
+# same two hex values as light mode — no dark-specific variant needed.
 CHART_BG = "#F6F1E4"  # --parchment
 CHART_GRIDCOLOR = "#D8CBAE"  # muted parchment-adjacent tone
+CHART_TEXT_COLOR = "#1F1710"  # --ink
+CHART_BG_DARK = "#241C13"  # --parchment's dark-mode value
+CHART_GRIDCOLOR_DARK = "#4A3B27"  # dark-adjacent tone, same subtlety as light's grid
+CHART_TEXT_COLOR_DARK = "#EDE6D6"  # --cream-text
 TYPE_COLOR_MAP = {"conventional": "#7C8F3E", "organic": "#B4432E"}  # --flesh / --bruise
+
+
+def _chart_chrome(theme: str) -> tuple[str, str, str]:
+    """(plot/paper background, gridline color, text color) for `theme`."""
+    if theme == "dark":
+        return CHART_BG_DARK, CHART_GRIDCOLOR_DARK, CHART_TEXT_COLOR_DARK
+    return CHART_BG, CHART_GRIDCOLOR, CHART_TEXT_COLOR
+
+
+def _chart_legend_style(theme: str) -> dict[str, str]:
+    if theme == "dark":
+        return {"bgcolor": "rgba(36, 28, 19, 0.85)", "bordercolor": "#6B5A3E"}
+    return {"bgcolor": "rgba(255, 255, 255, 0.8)", "bordercolor": "gray"}
+
 
 # Plotly's default modebar has zoom/pan/select buttons that are inert on
 # these charts (all axes are `fixedrange: True`) — this config keeps only
@@ -288,6 +330,15 @@ LANGUAGE_TOGGLE_OPTIONS: list[Option] = [
     {"label": "EN", "value": "en"},
 ]
 
+# Dark mode (issue #45). "light"/"dark" resolved client-side: an explicit
+# choice (persisted in theme-store's localStorage) always wins; the OS's
+# prefers-color-scheme is consulted only when no explicit choice has been
+# stored yet. See the clientside_callback near the bottom of this file.
+THEME_TOGGLE_OPTIONS: list[Option] = [
+    {"label": "☀", "value": "light"},
+    {"label": "🌙", "value": "dark"},
+]
+
 REGION_FILTER_OPTIONS: DropdownOptions = [
     {"label": region, "value": region} for region in regions
 ]
@@ -417,8 +468,17 @@ def decode_query_to_filters(search: str | None) -> dict[str, Any]:
 app.layout = html.Div(
     children=[
         dcc.Location(id="url", refresh=False),
+        dcc.Store(id="theme-store", storage_type="local"),
+        dcc.Store(id="theme-resolved"),
         html.Div(
             children=[
+                dcc.RadioItems(
+                    id="theme-toggle",
+                    options=THEME_TOGGLE_OPTIONS,
+                    value=None,
+                    inline=True,
+                    className="theme-toggle",
+                ),
                 dcc.RadioItems(
                     id="language-toggle",
                     options=LANGUAGE_TOGGLE_OPTIONS,
@@ -575,7 +635,7 @@ app.layout = html.Div(
                     style={
                         "text-align": "center",
                         "margin": "40px 0 20px 0",
-                        "color": "var(--pit)",
+                        "color": "var(--heading-accent)",
                         "font-family": "Fraunces, serif",
                         "font-size": "28px",
                     },
@@ -659,7 +719,7 @@ app.layout = html.Div(
                     style={
                         "text-align": "center",
                         "margin": "40px 0 20px 0",
-                        "color": "var(--pit)",
+                        "color": "var(--heading-accent)",
                         "font-family": "Fraunces, serif",
                         "font-size": "28px",
                     },
@@ -882,12 +942,15 @@ def _region_traces(
     return traces
 
 
-def create_price_chart(filtered_data: pd.DataFrame, lang: str = "en") -> dict[str, Any]:
+def create_price_chart(
+    filtered_data: pd.DataFrame, lang: str = "en", theme: str = "light"
+) -> dict[str, Any]:
     """Create the price chart, one line per region in `filtered_data`."""
     price_label = translations.t("common.price", lang)
     traces = _region_traces(
         filtered_data, "AveragePrice", price_label, "$%{y:.2f}", lang
     )
+    chart_bg, gridcolor, text_color = _chart_chrome(theme)
     return {
         "data": traces,
         "layout": {
@@ -901,37 +964,38 @@ def create_price_chart(filtered_data: pd.DataFrame, lang: str = "en") -> dict[st
                 "fixedrange": True,
                 "title": translations.t("common.date", lang),
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
             "yaxis": {
                 "tickprefix": "$",
                 "fixedrange": True,
                 "title": translations.t("charts.price.yaxis", lang),
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
-            "plot_bgcolor": CHART_BG,
-            "paper_bgcolor": CHART_BG,
+            "plot_bgcolor": chart_bg,
+            "paper_bgcolor": chart_bg,
+            "font": {"color": text_color},
             "showlegend": len(traces) > 1,
             "legend": {
                 "x": 1.02,
                 "y": 1,
-                "bgcolor": "rgba(255,255,255,0.8)",
-                "bordercolor": "gray",
                 "borderwidth": 1,
+                **_chart_legend_style(theme),
             },
         },
     }
 
 
 def create_volume_chart(
-    filtered_data: pd.DataFrame, lang: str = "en"
+    filtered_data: pd.DataFrame, lang: str = "en", theme: str = "light"
 ) -> dict[str, Any]:
     """Create the volume chart, one line per region in `filtered_data`."""
     volume_label = translations.t("common.volume", lang)
     traces = _region_traces(
         filtered_data, "Total Volume", volume_label, "%{y:,.0f}", lang
     )
+    chart_bg, gridcolor, text_color = _chart_chrome(theme)
     return {
         "data": traces,
         "layout": {
@@ -945,30 +1009,34 @@ def create_volume_chart(
                 "fixedrange": True,
                 "title": translations.t("common.date", lang),
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
             "yaxis": {
                 "fixedrange": True,
                 "title": volume_label,
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
-            "plot_bgcolor": CHART_BG,
-            "paper_bgcolor": CHART_BG,
+            "plot_bgcolor": chart_bg,
+            "paper_bgcolor": chart_bg,
+            "font": {"color": text_color},
             "showlegend": len(traces) > 1,
             "legend": {
                 "x": 1.02,
                 "y": 1,
-                "bgcolor": "rgba(255,255,255,0.8)",
-                "bordercolor": "gray",
                 "borderwidth": 1,
+                **_chart_legend_style(theme),
             },
         },
     }
 
 
 def create_box_plot(
-    filtered_data: pd.DataFrame, column: str, group_by: str, lang: str = "en"
+    filtered_data: pd.DataFrame,
+    column: str,
+    group_by: str,
+    lang: str = "en",
+    theme: str = "light",
 ) -> dict[str, Any]:
     """Create a box plot for the selected column grouped by the specified variable."""
     # Color mapping for different groups
@@ -1045,6 +1113,7 @@ def create_box_plot(
         x_title = translations.groupby_label(group_by, lang)
         show_legend = len(traces) > 1
 
+    chart_bg, gridcolor, text_color = _chart_chrome(theme)
     return {
         "data": traces,
         "layout": {
@@ -1061,29 +1130,33 @@ def create_box_plot(
             "xaxis": {
                 "title": x_title,
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
             "yaxis": {
                 "title": translations.column_label(column, lang),
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
-            "plot_bgcolor": CHART_BG,
-            "paper_bgcolor": CHART_BG,
+            "plot_bgcolor": chart_bg,
+            "paper_bgcolor": chart_bg,
+            "font": {"color": text_color},
             "showlegend": show_legend,
             "legend": {
                 "x": 1.02,
                 "y": 1,
-                "bgcolor": "rgba(255,255,255,0.8)",
-                "bordercolor": "gray",
                 "borderwidth": 1,
+                **_chart_legend_style(theme),
             },
         },
     }
 
 
 def create_scatter_chart(
-    filtered_data: pd.DataFrame, x_col: str, y_col: str, lang: str = "en"
+    filtered_data: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    lang: str = "en",
+    theme: str = "light",
 ) -> dict[str, Any]:
     """Create a scatter plot with selected columns."""
     # Create color mapping for avocado types
@@ -1122,6 +1195,7 @@ def create_scatter_chart(
             }
         )
 
+    chart_bg, gridcolor, text_color = _chart_chrome(theme)
     return {
         "data": traces,
         "layout": {
@@ -1136,22 +1210,22 @@ def create_scatter_chart(
             "xaxis": {
                 "title": x_label,
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
             "yaxis": {
                 "title": y_label,
                 "showgrid": True,
-                "gridcolor": CHART_GRIDCOLOR,
+                "gridcolor": gridcolor,
             },
-            "plot_bgcolor": CHART_BG,
-            "paper_bgcolor": CHART_BG,
+            "plot_bgcolor": chart_bg,
+            "paper_bgcolor": chart_bg,
+            "font": {"color": text_color},
             "hovermode": "closest",
             "legend": {
                 "x": 1.02,
                 "y": 1,
-                "bgcolor": "rgba(255,255,255,0.8)",
-                "bordercolor": "gray",
                 "borderwidth": 1,
+                **_chart_legend_style(theme),
             },
         },
     }
@@ -1362,6 +1436,54 @@ def sync_url_and_filters(
     return (new_search,) + (no_update,) * 8
 
 
+# Theme resolution (issue #45). Same self-referencing, single-callback
+# shape as sync_url_and_filters above (theme-toggle.value is deliberately
+# both an Output and an Input, likewise theme-store.data) — this must be
+# clientside because it needs window.matchMedia (OS preference, not
+# available server-side) and writes the data-theme attribute directly
+# onto <html>, which is outside app.layout's own component tree and so
+# unreachable from a server-side callback.
+#
+# theme-store is written ONLY when the trigger is the toggle itself (an
+# explicit choice) — never from an OS-preference-derived resolution. That
+# keeps the store empty until the user actually picks a theme, so an
+# unset store re-checks the live OS preference on every load instead of
+# freezing the first-ever detected preference in as if it were explicit.
+# theme-resolved (memory-only, not persisted) always mirrors the current
+# effective theme regardless of how it was derived, and is what the
+# server-side chart callbacks below key off of — theme-store alone can't
+# serve that role since it deliberately stays empty pre-explicit-choice.
+# Dash ships no type stubs for clientside_callback (unlike app.callback).
+app.clientside_callback(  # type: ignore[no-untyped-call]
+    """
+    function(toggleValue, storedTheme) {
+        var triggeredId = dash_clientside.callback_context.triggered_id;
+        var resolved;
+        var newStored = dash_clientside.no_update;
+
+        if (triggeredId === "theme-toggle") {
+            resolved = toggleValue;
+            newStored = toggleValue;
+        } else if (storedTheme) {
+            resolved = storedTheme;
+        } else {
+            var prefersDark = window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches;
+            resolved = prefersDark ? "dark" : "light";
+        }
+
+        document.documentElement.setAttribute("data-theme", resolved);
+        return [resolved, newStored, resolved];
+    }
+    """,
+    Output("theme-toggle", "value"),
+    Output("theme-store", "data"),
+    Output("theme-resolved", "data"),
+    Input("theme-toggle", "value"),
+    Input("theme-store", "data"),
+)
+
+
 @app.callback(
     Output("summary-panel", "children"),
     Input("region-filter", "value"),
@@ -1487,6 +1609,7 @@ def download_filtered_csv(
     Input("date-range", "start_date"),
     Input("date-range", "end_date"),
     Input("language-toggle", "value"),
+    Input("theme-resolved", "data"),
 )
 def update_charts(
     regions: list[str] | None,
@@ -1494,12 +1617,14 @@ def update_charts(
     start_date: str,
     end_date: str,
     lang: str = "en",
+    theme: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Update charts based on filter selections."""
+    theme = theme or "light"
     try:
         if not regions:
             empty_fig = empty_state_figure(
-                translations.t("empty.select_region", lang), lang
+                translations.t("empty.select_region", lang), lang, theme
             )
             return empty_fig, empty_fig
 
@@ -1509,13 +1634,13 @@ def update_charts(
         # Handle empty data case
         if filtered_data.empty:
             empty_fig = empty_state_figure(
-                translations.t("empty.try_adjusting", lang), lang
+                translations.t("empty.try_adjusting", lang), lang, theme
             )
             return empty_fig, empty_fig
 
         return (
-            create_price_chart(filtered_data, lang),
-            create_volume_chart(filtered_data, lang),
+            create_price_chart(filtered_data, lang, theme),
+            create_volume_chart(filtered_data, lang, theme),
         )
 
     except Exception as e:
@@ -1542,6 +1667,7 @@ def update_charts(
     Input("x-axis-dropdown", "value"),
     Input("y-axis-dropdown", "value"),
     Input("language-toggle", "value"),
+    Input("theme-resolved", "data"),
 )
 def update_scatter_chart(
     regions: list[str] | None,
@@ -1551,20 +1677,26 @@ def update_scatter_chart(
     x_col: str,
     y_col: str,
     lang: str = "en",
+    theme: str | None = None,
 ) -> dict[str, Any]:
     """Update scatter chart based on filter selections and axis choices."""
+    theme = theme or "light"
     try:
         if not regions:
-            return empty_state_figure(translations.t("empty.select_region", lang), lang)
+            return empty_state_figure(
+                translations.t("empty.select_region", lang), lang, theme
+            )
 
         # Filter data based on selections
         filtered_data = filter_data(regions, avocado_type, start_date, end_date)
 
         # Handle empty data case
         if filtered_data.empty:
-            return empty_state_figure(translations.t("empty.try_adjusting", lang), lang)
+            return empty_state_figure(
+                translations.t("empty.try_adjusting", lang), lang, theme
+            )
 
-        return create_scatter_chart(filtered_data, x_col, y_col, lang)
+        return create_scatter_chart(filtered_data, x_col, y_col, lang, theme)
 
     except Exception as e:
         logger.error(f"Error in scatter chart callback: {str(e)}", exc_info=True)
@@ -1590,6 +1722,7 @@ def update_scatter_chart(
     Input("box-plot-column", "value"),
     Input("box-plot-groupby", "value"),
     Input("language-toggle", "value"),
+    Input("theme-resolved", "data"),
 )
 def update_box_plot(
     regions: list[str] | None,
@@ -1599,8 +1732,10 @@ def update_box_plot(
     column: str,
     group_by: str,
     lang: str = "en",
+    theme: str | None = None,
 ) -> dict[str, Any]:
     """Update box plot based on filter selections and grouping choice."""
+    theme = theme or "light"
     try:
         # For box plots, we might want to show data across different groups
         # So we'll modify the filtering based on the group_by selection
@@ -1613,7 +1748,7 @@ def update_box_plot(
         else:
             if not regions:
                 return empty_state_figure(
-                    translations.t("empty.select_region", lang), lang
+                    translations.t("empty.select_region", lang), lang, theme
                 )
             if group_by == "type":
                 # Show both types, but filter by regions and date
@@ -1626,9 +1761,11 @@ def update_box_plot(
 
         # Handle empty data case
         if filtered_data.empty:
-            return empty_state_figure(translations.t("empty.try_adjusting", lang), lang)
+            return empty_state_figure(
+                translations.t("empty.try_adjusting", lang), lang, theme
+            )
 
-        return create_box_plot(filtered_data, column, group_by, lang)
+        return create_box_plot(filtered_data, column, group_by, lang, theme)
 
     except Exception as e:
         logger.error(f"Error in box plot callback: {str(e)}", exc_info=True)
