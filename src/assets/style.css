@@ -1,3 +1,9 @@
+/* --ink, --flesh, --pit, --bruise, --cream-text are brand hues and stay
+   fixed across themes — the header/footer band is always --ink, and
+   --pit/--flesh/--cream-text badges (info-icon, download-button) are
+   self-contained and already validated against --ink. The tokens below
+   are theme-*dependent* surface/text roles: light values here on the
+   bare :root, dark overrides further down (issue #45). */
 :root {
     --ink: #1F1710;
     --parchment: #F6F1E4;
@@ -5,9 +11,45 @@
     --pit: #8B5A2B;
     --bruise: #B4432E;
     --cream-text: #EDE6D6;
+    --card-bg: #FFFFFF;
+    --text: var(--ink);
+    --text-muted: rgba(31, 23, 16, 0.65);
+    --heading-accent: var(--pit);
+    --summary-up-color: #5C7A2E;
+    --summary-down-color: var(--bruise);
     --font-display: "Fraunces", serif;
     --font-body: "Inter", sans-serif;
     --font-mono: "IBM Plex Mono", monospace;
+}
+
+/* Dark mode (issue #45): --ink stays the header/footer band in both
+   themes; --parchment becomes a near-black page background and
+   --card-bg a slightly lighter elevated surface above it. Text-role
+   tokens (--text, --text-muted, --heading-accent, --summary-*-color)
+   get lighter counterparts re-validated for 4.5:1 AA contrast against
+   the new dark surfaces (see specs/accessibility-dark-mode.md).
+   Precedence: an explicit data-theme attribute (set by the theme
+   toggle, via JS on <html>) always wins over the OS preference. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --parchment: #241C13;
+        --card-bg: #332818;
+        --text: var(--cream-text);
+        --text-muted: rgba(237, 230, 214, 0.65);
+        --heading-accent: #C99B5E;
+        --summary-up-color: #9CBF5E;
+        --summary-down-color: #E67A63;
+    }
+}
+
+:root[data-theme="dark"] {
+    --parchment: #241C13;
+    --card-bg: #332818;
+    --text: var(--cream-text);
+    --text-muted: rgba(237, 230, 214, 0.65);
+    --heading-accent: #C99B5E;
+    --summary-up-color: #9CBF5E;
+    --summary-down-color: #E67A63;
 }
 
 *,
@@ -27,6 +69,27 @@ body {
     height: 288px;
     padding: 16px 0 0 0;
     position: relative;
+}
+
+.theme-toggle {
+    position: absolute;
+    top: 16px;
+    right: 140px;
+    display: flex;
+    align-items: center;
+}
+
+.theme-toggle label {
+    color: var(--cream-text);
+    font-size: 16px;
+    cursor: pointer;
+    margin-right: 8px;
+}
+
+.theme-toggle input[type="radio"] {
+    margin-right: 2px;
+    cursor: pointer;
+    accent-color: var(--flesh);
 }
 
 .language-toggle {
@@ -81,7 +144,9 @@ body {
 }
 
 .header-link:hover {
-    color: var(--pit);
+    /* --pit on --ink is only 3.03:1 (fails WCAG AA 4.5:1) — this lighter
+       tan clears 7.01:1 while staying in the same warm palette. */
+    color: #C99B5E;
     text-decoration: underline;
 }
 
@@ -121,13 +186,18 @@ body {
 .menu > div {
     flex: 1 1 220px;
     padding: 0 32px;
-    border-left: 1px solid var(--pit);
+    border-left: 1px solid var(--heading-accent);
 }
 
 .menu > div:first-child {
     border-left: none;
 }
 
+/* Known limitation (dark mode, issue #45): the dcc.Dropdown popover and
+   dcc.DatePickerRange calendar are third-party react-select/react-dates
+   internals this repo doesn't fully theme (same category of upstream
+   limitation already documented for axe-core in issue #44) — they keep
+   their default light styling in dark mode. */
 .Select-control {
     width: 100%;
     height: 48px;
@@ -157,7 +227,7 @@ body {
 .menu-title {
     margin-bottom: 6px;
     font-weight: bold;
-    color: var(--pit);
+    color: var(--heading-accent);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -209,7 +279,7 @@ body {
 }
 
 .download-status {
-    color: rgba(31, 23, 16, 0.6);
+    color: var(--text-muted);
     font-style: italic;
     font-size: 13px;
 }
@@ -225,7 +295,7 @@ body {
     flex-wrap: wrap;
     justify-content: space-evenly;
     gap: 16px;
-    background-color: #FFFFFF;
+    background-color: var(--card-bg);
     box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
     padding: 20px;
 }
@@ -236,7 +306,7 @@ body {
 }
 
 .summary-stat-label {
-    color: rgba(31, 23, 16, 0.6);
+    color: var(--text-muted);
     font-size: 13px;
     font-weight: bold;
     text-transform: uppercase;
@@ -245,26 +315,26 @@ body {
 }
 
 .summary-stat-value {
-    color: var(--ink);
+    color: var(--text);
     font-family: var(--font-mono);
     font-size: 24px;
     font-weight: bold;
 }
 
 .summary-stat-up {
-    color: var(--flesh);
+    color: var(--summary-up-color);
 }
 
 .summary-stat-down {
-    color: var(--bruise);
+    color: var(--summary-down-color);
 }
 
 .summary-empty {
-    background-color: #FFFFFF;
+    background-color: var(--card-bg);
     box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
     padding: 20px;
     text-align: center;
-    color: rgba(31, 23, 16, 0.6);
+    color: var(--text-muted);
     font-style: italic;
 }
 
@@ -288,6 +358,8 @@ body {
 }
 
 .footer-link:hover {
-    color: var(--pit);
+    /* --pit on --ink is only 3.03:1 (fails WCAG AA 4.5:1) — same fix as
+       .header-link:hover. */
+    color: #C99B5E;
     text-decoration: underline;
 }

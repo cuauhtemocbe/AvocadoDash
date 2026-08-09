@@ -192,6 +192,50 @@ def test_region_filter_is_multi_select_with_single_region_default():
     assert dropdown.value == ["Albany"]
 
 
+def test_theme_store_persists_to_local_storage():
+    """Issue #45: the explicit theme choice must survive a page reload."""
+    store = find_component_by_id(app.layout, "theme-store")
+    assert store is not None
+    assert store.storage_type == "local"
+
+
+def test_theme_toggle_offers_light_and_dark_with_no_initial_value():
+    """The toggle starts unset (None) — its displayed value is resolved
+    client-side (explicit store choice, else OS preference) rather than
+    hardcoded to light or dark at layout-build time."""
+    toggle = find_component_by_id(app.layout, "theme-toggle")
+    assert toggle is not None
+    assert {opt["value"] for opt in toggle.options} == {"light", "dark"}
+    assert toggle.value is None
+
+
+def test_theme_sync_clientside_callback_is_registered_both_directions():
+    """theme-toggle.value and theme-store.data are each registered as
+    both an Output and an Input of the same clientside callback — the
+    self-referencing shape already validated for sync_url_and_filters
+    (specs/shareable-url-state-plan.md), needed here because OS-preference
+    detection and the data-theme DOM attribute are only reachable
+    client-side. theme-resolved.data is an Output-only third leg: the
+    resolved value server-side chart callbacks key off of, since
+    theme-store deliberately stays empty until an explicit choice."""
+    matches = [
+        entry
+        for entry in app.callback_map.values()
+        if {inp["id"] for inp in entry["inputs"]} == {"theme-toggle", "theme-store"}
+    ]
+    assert len(matches) == 1
+    callback = matches[0]
+    output_targets = {
+        (output.component_id, output.component_property)
+        for output in callback["output"]
+    }
+    assert output_targets == {
+        ("theme-toggle", "value"),
+        ("theme-store", "data"),
+        ("theme-resolved", "data"),
+    }
+
+
 def test_filter_data_matches_today_s_single_region_query():
     regions, avocado_type = ["Albany"], "organic"
     start_date, end_date = "2015-01-01", "2015-12-31"
@@ -339,6 +383,43 @@ def test_header_contains_the_cross_section_mark():
 
 def test_header_no_longer_renders_the_emoji():
     assert "🥑" not in collect_text(app.layout)
+
+
+def test_header_mark_image_is_hidden_from_assistive_technology():
+    """Issue #44: the decorative Cross-Section Mark must not be announced
+    by screen readers — empty alt text is the standard way to hide a
+    purely decorative <img> from assistive technology."""
+    mark = find_component_by_id(app.layout, "header-mark")
+    assert mark is not None
+    image = mark.children
+    assert image.alt == ""
+
+
+def iter_all_components(component):
+    """Recursively yield every Dash component in the layout tree."""
+    yield component
+    children = getattr(component, "children", None)
+    if children is None:
+        return
+    if not isinstance(children, list):
+        children = [children]
+    for child in children:
+        if hasattr(child, "to_plotly_json"):
+            yield from iter_all_components(child)
+
+
+def test_no_component_overrides_natural_keyboard_tab_order():
+    """Issue #44: filter controls must be reachable via keyboard in
+    logical order. Dash's default DOM order already matches the visual
+    order the controls are declared in; the risk is a future explicit
+    tabIndex silently breaking that — so this guards against any
+    component setting tabIndex at all."""
+    offending = [
+        component
+        for component in iter_all_components(app.layout)
+        if "tabIndex" in component.to_plotly_json().get("props", {})
+    ]
+    assert offending == []
 
 
 def test_summary_panel_shows_avg_price_and_total_volume():
@@ -538,6 +619,17 @@ CHART_BUILDERS_WITH_FILTERED_DATA = [
     lambda filtered: create_scatter_chart(filtered, "AveragePrice", "Total Volume"),
 ]
 
+CHART_BUILDERS_WITH_FILTERED_DATA_AND_THEME = [
+    lambda filtered, theme: create_price_chart(filtered, theme=theme),
+    lambda filtered, theme: create_volume_chart(filtered, theme=theme),
+    lambda filtered, theme: create_box_plot(
+        filtered, "AveragePrice", "type", theme=theme
+    ),
+    lambda filtered, theme: create_scatter_chart(
+        filtered, "AveragePrice", "Total Volume", theme=theme
+    ),
+]
+
 
 @pytest.mark.parametrize("build_chart", CHART_BUILDERS_WITH_FILTERED_DATA)
 def test_chart_backgrounds_use_the_parchment_token(build_chart):
@@ -547,6 +639,31 @@ def test_chart_backgrounds_use_the_parchment_token(build_chart):
 
     assert figure["layout"]["plot_bgcolor"] == "#F6F1E4"
     assert figure["layout"]["paper_bgcolor"] == "#F6F1E4"
+
+
+@pytest.mark.parametrize("build_chart", CHART_BUILDERS_WITH_FILTERED_DATA_AND_THEME)
+def test_chart_backgrounds_and_text_switch_to_dark_theme(build_chart):
+    """Issue #45: theme="dark" re-renders chart chrome (background, grid,
+    legend, and — critically — text color, or titles/axes would be
+    unreadable dark-on-dark) with the dark-mode tokens, mirroring
+    style.css's --parchment dark-mode value."""
+    filtered = data.query("region == 'Albany'").head(50)
+
+    figure = build_chart(filtered, "dark")
+
+    assert figure["layout"]["plot_bgcolor"] == "#241C13"
+    assert figure["layout"]["paper_bgcolor"] == "#241C13"
+    assert figure["layout"]["font"]["color"] == "#EDE6D6"
+
+
+@pytest.mark.parametrize("build_chart", CHART_BUILDERS_WITH_FILTERED_DATA_AND_THEME)
+def test_chart_backgrounds_default_to_light_theme(build_chart):
+    filtered = data.query("region == 'Albany'").head(50)
+
+    figure = build_chart(filtered, "light")
+
+    assert figure["layout"]["plot_bgcolor"] == "#F6F1E4"
+    assert figure["layout"]["font"]["color"] == "#1F1710"
 
 
 def test_create_box_plot_uses_the_new_type_color_map():
@@ -590,6 +707,42 @@ def test_region_line_palette_is_unchanged_by_the_chart_chrome_recolor():
     assert trace_colors <= set(REGION_COLOR_PALETTE)
 
 
+def test_region_line_palette_is_reused_unchanged_in_dark_mode():
+    """Issue #51: re-validated against the dark chart surface with
+    /dataviz's validate_palette.js (see the comment above
+    REGION_COLOR_PALETTE) — same 8 hues clear the same CVD/contrast bar
+    in both themes, so dark mode draws from the identical palette rather
+    than a separate dark-specific one. This regression test is the
+    trip-wire: if REGION_COLOR_PALETTE ever changes, dark-mode charts
+    must keep drawing from it (not a stale copy) — otherwise this fails
+    and the palette needs re-running through the validator for both
+    surfaces before the change ships."""
+    filtered = data.query(
+        "region in ['Albany', 'Chicago', 'Houston'] and type == 'organic'"
+    )
+
+    figure = create_price_chart(filtered, theme="dark")
+
+    trace_colors = {trace["line"]["color"] for trace in figure["data"]}
+    assert trace_colors <= set(REGION_COLOR_PALETTE)
+
+
+def test_type_color_map_is_reused_unchanged_in_dark_mode():
+    """Issue #51: TYPE_COLOR_MAP's two hues also passed validate_palette.js
+    unchanged against the dark surface (see the comment above CHART_BG)."""
+    filtered = data.query(
+        "region == 'Albany' and Date >= '2015-01-01' and Date <= '2015-12-31'"
+    )
+
+    figure = create_box_plot(filtered, "AveragePrice", "type", theme="dark")
+
+    colors_by_name = {
+        trace["name"]: trace["marker"]["color"] for trace in figure["data"]
+    }
+    assert colors_by_name["Conventional"] == "#7C8F3E"
+    assert colors_by_name["Organic"] == "#B4432E"
+
+
 def test_update_charts_shows_one_line_per_selected_region():
     price_fig, volume_fig = update_charts(
         ["Albany", "Chicago"], "organic", "2015-01-01", "2015-12-31"
@@ -608,6 +761,24 @@ def test_update_charts_single_region_behaves_like_before():
     assert len(volume_fig["data"]) == 1
     assert price_fig["data"][0]["name"] == "Albany"
     assert volume_fig["data"][0]["name"] == "Albany"
+
+
+def test_update_charts_honors_the_resolved_theme_input():
+    price_fig, volume_fig = update_charts(
+        ["Albany"], "organic", "2015-01-01", "2015-12-31", "en", "dark"
+    )
+
+    assert price_fig["layout"]["plot_bgcolor"] == "#241C13"
+    assert volume_fig["layout"]["plot_bgcolor"] == "#241C13"
+
+
+def test_update_charts_defaults_to_light_theme_when_resolved_theme_is_none():
+    price_fig, volume_fig = update_charts(
+        ["Albany"], "organic", "2015-01-01", "2015-12-31"
+    )
+
+    assert price_fig["layout"]["plot_bgcolor"] == "#F6F1E4"
+    assert volume_fig["layout"]["plot_bgcolor"] == "#F6F1E4"
 
 
 def test_update_charts_returns_empty_state_for_no_matching_data():
@@ -705,6 +876,21 @@ def test_update_scatter_chart_returns_valid_figure_for_matching_data():
     assert figure["layout"]["title"]["text"] == "Average Price vs Total Volume"
 
 
+def test_update_scatter_chart_honors_the_resolved_theme_input():
+    figure = update_scatter_chart(
+        ["Albany"],
+        "organic",
+        "2015-01-01",
+        "2015-12-31",
+        "AveragePrice",
+        "Total Volume",
+        "en",
+        "dark",
+    )
+
+    assert figure["layout"]["plot_bgcolor"] == "#241C13"
+
+
 def test_update_scatter_chart_pools_data_from_multiple_regions():
     figure = update_scatter_chart(
         ["Albany", "Chicago"],
@@ -792,6 +978,21 @@ def test_update_box_plot_applies_query_for_each_group_by_mode(
     )
 
     assert figure["data"]
+
+
+def test_update_box_plot_honors_the_resolved_theme_input():
+    figure = update_box_plot(
+        ["Albany"],
+        "organic",
+        "2015-01-01",
+        "2015-12-31",
+        "AveragePrice",
+        "type",
+        "en",
+        "dark",
+    )
+
+    assert figure["layout"]["plot_bgcolor"] == "#241C13"
 
 
 def test_update_box_plot_pools_data_from_multiple_regions_when_grouped_by_type():
