@@ -65,6 +65,24 @@ def calculate_price_change(
     return (current_avg - previous_avg) / previous_avg * 100
 
 
+def detect_price_anomalies(prices: pd.Series, std_threshold: float = 2.0) -> pd.Series:
+    """Boolean mask flagging points more than `std_threshold` standard
+    deviations from `prices`' own mean. Whole-range mean/std, not a
+    rolling window — the forecasting spike (issue #38) found rolling
+    windows added no benefit over naive on this dataset. Fewer than 2
+    points, or a perfectly flat series (std == 0), can't define a
+    deviation — both return an all-False mask rather than raising."""
+    if len(prices) < 2:
+        return pd.Series(False, index=prices.index)
+
+    std = prices.std()
+    if std == 0:
+        return pd.Series(False, index=prices.index)
+
+    deviations = (prices - prices.mean()).abs() / std
+    return deviations > std_threshold
+
+
 def find_region_extremes(
     data: pd.DataFrame, avocado_type: str, start_date: str, end_date: str
 ) -> dict[str, Any] | None:

@@ -14,6 +14,7 @@ import translations
 from utils import (
     calculate_price_change,
     calculate_summary_stats,
+    detect_price_anomalies,
     find_region_extremes,
     format_number,
 )
@@ -942,14 +943,66 @@ def _region_traces(
     return traces
 
 
+ANOMALY_STD_THRESHOLD = 2.0
+ANOMALY_MARKER_COLOR = "#B4432E"  # --bruise — fixed, not per-region
+
+
+def _anomaly_traces(
+    filtered_data: pd.DataFrame, lang: str = "en"
+) -> list[dict[str, Any]]:
+    """One marker-only trace per region with ≥1 anomalous price point
+    (issue #39). A single fixed color/symbol and one shared "Anomaly"
+    legend entry (via legendgroup) — not per-region — to avoid legend
+    clutter when multiple regions are selected."""
+    traces: list[dict[str, Any]] = []
+    anomaly_label = translations.t("charts.price.anomaly_label", lang)
+    date_label = translations.t("common.date", lang)
+    price_label = translations.t("common.price", lang)
+    for region in sorted(filtered_data["region"].unique()):
+        region_data = filtered_data[filtered_data["region"] == region]
+        anomaly_mask = detect_price_anomalies(
+            region_data["AveragePrice"], ANOMALY_STD_THRESHOLD
+        )
+        if not anomaly_mask.any():
+            continue
+        anomaly_points = region_data[anomaly_mask]
+        traces.append(
+            {
+                "x": anomaly_points["Date"],
+                "y": anomaly_points["AveragePrice"],
+                "type": "scatter",
+                "mode": "markers",
+                "name": anomaly_label,
+                "legendgroup": "anomaly",
+                "showlegend": len(traces) == 0,
+                "hovertemplate": (
+                    f"<b>{anomaly_label}</b> ({region})<br>"
+                    f"{date_label}: %{{x}}<br>"
+                    f"{price_label}: $%{{y:.2f}}<extra></extra>"
+                ),
+                "marker": {
+                    "size": 12,
+                    "symbol": "x",
+                    "color": ANOMALY_MARKER_COLOR,
+                    "line": {"width": 2, "color": ANOMALY_MARKER_COLOR},
+                },
+            }
+        )
+    return traces
+
+
 def create_price_chart(
     filtered_data: pd.DataFrame, lang: str = "en", theme: str = "light"
 ) -> dict[str, Any]:
-    """Create the price chart, one line per region in `filtered_data`."""
+    """Create the price chart, one line per region in `filtered_data`,
+    plus anomaly markers (see _anomaly_traces) for any region with a
+    price point beyond ANOMALY_STD_THRESHOLD standard deviations from
+    its own mean over the selected range."""
     price_label = translations.t("common.price", lang)
     traces = _region_traces(
         filtered_data, "AveragePrice", price_label, "$%{y:.2f}", lang
     )
+    traces += _anomaly_traces(filtered_data, lang)
     chart_bg, gridcolor, text_color = _chart_chrome(theme)
     return {
         "data": traces,
