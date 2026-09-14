@@ -1,6 +1,6 @@
 ---
 title: Fail-Closed Trivy Pre-Push CVE Gate
-status: in-progress
+status: completed
 created: 2026-09-14
 updated: 2026-09-14
 issue: meta-projects#41
@@ -44,33 +44,33 @@ rather than silently skipping the scan.
 
 ### Functional Requirements
 
-- [ ] A new `.githooks/pre-push` hook runs on `git push` once
+- [x] A new `.githooks/pre-push` hook runs on `git push` once
       `make install-hooks` has been run (same activation as the existing
       `pre-commit` hook — `core.hooksPath` already points at `.githooks`).
-- [ ] The hook checks for `trivy` on `PATH`. If missing, it prints a message
+- [x] The hook checks for `trivy` on `PATH`. If missing, it prints a message
       pointing to `.claude/skills/trivy-scan/setup.md` and exits non-zero,
       blocking the push (fail closed, not skip-if-missing).
-- [ ] If `trivy` is present, the hook runs
+- [x] If `trivy` is present, the hook runs
       `trivy fs . --scanners vuln --severity CRITICAL --exit-code 1 --ignore-unfixed --quiet`
       against the repo root.
-- [ ] If Trivy finds any CRITICAL-severity vulnerability with an available
+- [x] If Trivy finds any CRITICAL-severity vulnerability with an available
       fix, the hook exits non-zero and the push is blocked.
-- [ ] If Trivy finds no such vulnerability, the hook exits 0 and the push
+- [x] If Trivy finds no such vulnerability, the hook exits 0 and the push
       proceeds.
 
 ### Non-Functional Requirements
 
-- [ ] No new activation mechanism: reuses `.githooks/` + `make
+- [x] No new activation mechanism: reuses `.githooks/` + `make
       install-hooks` exactly as-is; the hook file itself is the only new
       artifact.
-- [ ] No changes to `.githooks/pre-commit`, `Makefile`, or the existing
+- [x] No changes to `.githooks/pre-commit`, `Makefile`, or the existing
       `README.md` `install-hooks` documentation beyond, at most, a single
       line noting pre-push now also runs a scan.
-- [ ] The hook does not require Docker (unlike `pre-commit`) — it depends
+- [x] The hook does not require Docker (unlike `pre-commit`) — it depends
       only on `trivy` being present on the developer's host `PATH`, since
       pre-push checks are expected to run fast and Trivy is a single static
       binary.
-- [ ] Fail-closed by design: any condition that prevents the scan from
+- [x] Fail-closed by design: any condition that prevents the scan from
       actually running (missing binary) blocks the push rather than letting
       it through silently, matching the fleet-wide gate's intent.
 
@@ -162,17 +162,17 @@ N/A — no user-facing flow; verified by directly invoking
 
 ## Success Criteria
 
-- [ ] `.githooks/pre-push` exists, is executable, and matches the
+- [x] `.githooks/pre-push` exists, is executable, and matches the
       fleet-wide gate's exact script contract (trivy-presence check, then
       `trivy fs . --scanners vuln --severity CRITICAL --exit-code 1
       --ignore-unfixed --quiet`).
-- [ ] Running `trivy fs . --scanners vuln --severity CRITICAL
+- [x] Running `trivy fs . --scanners vuln --severity CRITICAL
       --ignore-unfixed` against the current repo returns clean (no
       CRITICAL fixable CVEs), confirming the gate starts from a passing
       state.
-- [ ] `make install-hooks` (unchanged) activates the new hook alongside the
+- [x] `make install-hooks` (unchanged) activates the new hook alongside the
       existing `pre-commit` hook, with no separate opt-in step.
-- [ ] No changes made to `.githooks/pre-commit`, `Makefile`, or app source.
+- [x] No changes made to `.githooks/pre-commit`, `Makefile`, or app source.
 
 ## Implementation Plan
 
