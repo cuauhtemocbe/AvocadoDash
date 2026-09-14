@@ -140,7 +140,7 @@ make help
 | `make docker-run`     | Levanta la app dentro de un contenedor Docker (imagen de producción, sin hot-reload) |
 | `make docker-stop`    | Detiene los contenedores en ejecución (producción y dev)     |
 | `make docker-shell`   | Abre una shell dentro de la imagen Docker de producción      |
-| `make install-hooks`  | Habilita los git hooks del repo (lint en pre-commit)         |
+| `make install-hooks`  | Habilita los git hooks del repo (lint en pre-commit, CVE gate en pre-push) |
 
 ---
 
@@ -165,6 +165,11 @@ make help
   El hook vive versionado en `.githooks/pre-commit` (no en `.git/hooks/`, que
   no se sube al repositorio), y `make install-hooks` simplemente apunta
   `core.hooksPath` a esa carpeta.
+
+- **Git hook de pre-push**: corre `trivy fs` sobre el repo y bloquea el push
+  si encuentra alguna vulnerabilidad CRITICAL con fix disponible (o si
+  `trivy` no está instalado). Se activa junto con el hook de pre-commit vía
+  `make install-hooks`; vive en `.githooks/pre-push`.
 
 ---
 
