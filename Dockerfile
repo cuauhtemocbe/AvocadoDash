@@ -18,6 +18,12 @@ RUN poetry config virtualenvs.in-project true
 COPY pyproject.toml poetry.lock README.md ./
 RUN poetry install --no-root --only main --no-interaction
 
+# virtualenv seeds pip into the venv, and pip vendors its own copies of
+# msgpack/setuptools (pip/_vendor) that Trivy flags. pip is never invoked at
+# runtime, so drop it before production copies the venv (same rationale as
+# the system pip uninstall in the production stage below).
+RUN .venv/bin/python -m pip uninstall -y pip
+
 # --- Dev image: full toolchain (poetry, git, dev deps) so `make test`/`make lint` can run in-container ---
 FROM base AS dev
 
