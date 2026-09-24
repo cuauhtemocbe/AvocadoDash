@@ -401,7 +401,7 @@ def _parse_date_param(value: str | None, default: date) -> str:
         return default.isoformat()
     try:
         parsed_date = pd.Timestamp(value).date()
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default.isoformat()
     if not (DATA_MIN_DATE <= parsed_date <= DATA_MAX_DATE):
         return default.isoformat()
