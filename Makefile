@@ -6,6 +6,9 @@ IMAGE_NAME := avocadodash
 CONTAINER_NAME := avocadodash
 GITLEAKS_IMAGE := zricethezav/gitleaks:latest
 PORT := 8050
+# Quality gates don't need network access; --network none also skips the
+# per-container network setup, which is a noticeable share of startup time.
+DEV_RUN := docker run --rm --network none -v "$(CURDIR)":/app $(IMAGE_NAME):dev
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -24,28 +27,33 @@ run: ## Levanta la app en Docker con hot-reload (http://localhost:8050). Requier
 ## --- Tests y lint: corren dentro de Docker con la imagen de dev (pytest/ruff) ---
 
 test: ## Ejecuta la suite de tests dentro de Docker. Requiere `make docker-build-dev` antes
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run pytest
+	$(DEV_RUN) poetry run pytest
 
 lint: ## Corre ruff check dentro de Docker. Requiere `make docker-build-dev` antes
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run ruff check .
+	$(DEV_RUN) poetry run ruff check .
 
 format: ## Formatea el código con ruff format dentro de Docker. Requiere `make docker-build-dev` antes
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run ruff format .
+	$(DEV_RUN) poetry run ruff format .
 
 format-check: ## Verifica el formato sin modificar archivos, dentro de Docker. Requiere `make docker-build-dev` antes
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run ruff format --check .
+	$(DEV_RUN) poetry run ruff format --check .
 
 lock-check: ## Verifica que poetry.lock esté sincronizado con pyproject.toml. Requiere `make docker-build-dev` antes
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry check --lock
+	$(DEV_RUN) poetry check --lock
 
 secret-scan: ## Escanea el diff staged en busca de secretos con gitleaks (usa el índice de git, no todo el repo)
 	docker run --rm -v "$(CURDIR)":/repo -w /repo $(GITLEAKS_IMAGE) protect --staged -v --source /repo
 
 typecheck: ## Corre mypy --strict sobre src/ (relajado sobre tests/). Requiere `make docker-build-dev` antes
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run mypy --strict src
-	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev poetry run mypy tests
+	$(DEV_RUN) sh -c 'poetry run mypy --strict src && poetry run mypy tests'
 
-validate: lint format-check typecheck test ## Corre todos los quality gates (mismo comando que usan el pre-commit hook y CI)
+validate: ## Corre todos los quality gates (lint, format-check, typecheck, test) en un solo contenedor. Lo usa el pre-commit hook
+	$(DEV_RUN) sh -c '\
+		poetry run ruff check . && \
+		poetry run ruff format --check . && \
+		poetry run mypy --strict src && \
+		poetry run mypy tests && \
+		poetry run pytest'
 
 ## --- Docker (build de las imágenes) ---
 

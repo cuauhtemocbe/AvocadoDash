@@ -108,5 +108,9 @@ jobs:
           image-ref: avocadodash:latest
           scanners: vuln
           severity: CRITICAL,HIGH
+          # Only fail on findings that have a fix available (matches the
+          # pre-push hook's --ignore-unfixed). Unpatched base-image CVEs
+          # otherwise block every deploy until Debian ships a fix.
+          ignore-unfixed: true
           exit-code: "1"
           trivyignores: .trivyignore.yaml
