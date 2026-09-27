@@ -47,6 +47,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # mypy's incremental cache lives in the bind-mounted repo (.mypy_cache/),
+      # so it can be restored between runs: cold ~50s vs ~2s warm. The key
+      # includes poetry.lock because the cache embeds third-party type info;
+      # restore-keys lets a run reuse the most recent cache even when the
+      # source changed (mypy only re-checks what differs).
+      - name: Restore mypy cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mypy_cache
+          key: mypy-${{ hashFiles('poetry.lock') }}-${{ github.sha }}
+          restore-keys: |
+            mypy-${{ hashFiles('poetry.lock') }}-
+
       - name: Build dev image
         run: make docker-build-dev
 
