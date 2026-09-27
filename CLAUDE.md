@@ -27,6 +27,9 @@ make test                       # pytest + coverage (config in [tool.pytest.ini_
 make lint                       # ruff check
 make format                     # ruff format
 make format-check               # ruff format --check
+make typecheck                  # mypy --strict src + mypy tests (separate caches under .mypy_cache/)
+make validate                   # lint + format-check + typecheck + test in ONE container (~12s warm)
+make clean                      # wipe .mypy_cache/.pytest_cache/.ruff_cache/coverage files
 
 # Docker (production image, no hot-reload — no dev tooling in the image)
 docker build -t avocado-dash .  # or: make docker-build
@@ -43,7 +46,9 @@ path is already bind-mounted (see the Docker section above), so the report
 shows up on the host without a manual `docker compose cp` step. A pre-commit git
 hook (`.githooks/pre-commit`, enabled via `make install-hooks`) runs
 `make secret-scan` + `make validate` (`lint` + `format-check` + `typecheck`
-+ `test`, in that order, all through the same target CI uses) — same as
++ `test`, in that order, in a single container; CI runs the same gate
+commands as separate jobs rather than through `make validate`, and its
+`typecheck` job restores `.mypy_cache/` with `actions/cache`) — same as
 everything else, this runs against Docker images (`avocadodash:dev` for
 lint/format/typecheck/test, the standalone `zricethezav/gitleaks` image for
 the secret scan), so `make docker-build-dev` must have been run at least
