@@ -57,7 +57,7 @@ CMD ["poetry", "run", "python", "src/app.py"]
 # not a frozen historical patch tag like `python:3.14.0-slim` — the latter
 # stops receiving OS security patches once superseded, so pinning its digest
 # just freezes in known CVEs instead of freezing in a known-good state. ---
-FROM python:3.14-slim@sha256:caaf356f40667c496d405780745b9ac25771c189a51dfcc42430d531ea09f8a2 AS production
+FROM python:3.14-slim@sha256:0741d101873c12ab927e6f8653feb8862b9bd58771177acb1b885b95141f91b4 AS production
 
 WORKDIR /app
 
@@ -68,6 +68,16 @@ RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 # drops whatever CVEs land on it (e.g. CVE-2025-8869) instead of carrying
 # them for no reason.
 RUN python -m pip uninstall -y pip
+
+# The pinned base image can lag Debian security updates by days. Upgrade only
+# the packages Trivy flags with a fix already published (currently libpcre2,
+# CVE-2026-103111) instead of carrying the CVE until the next digest bump,
+# then drop apt's lists so no extra layer weight or tooling state remains.
+# Remove this once the digest above ships libpcre2-8-0 >= 10.46-1~deb13u3.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv
 COPY src ./src
