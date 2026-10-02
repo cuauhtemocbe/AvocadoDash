@@ -99,7 +99,7 @@ def find_region_extremes(
     worst_region = region_avg.idxmin()
     return {
         "best_region": best_region,
-        "best_price": region_avg[best_region],
+        "best_price": region_avg.max(),
         "worst_region": worst_region,
-        "worst_price": region_avg[worst_region],
+        "worst_price": region_avg.min(),
     }
