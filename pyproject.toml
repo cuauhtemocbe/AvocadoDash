@@ -1,15 +1,15 @@
-[tool.poetry]
+[project]
 name = "env-dash"
 version = "0.1.0"
 description = ""
-authors = ["Kuautli <cuauhtemocbe@gmail.com>"]
+authors = [{ name = "Kuautli", email = "cuauhtemocbe@gmail.com" }]
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = ">=3.14,<3.15"
-pandas = ">=2.3.2,<4.0.0"
-dash = ">=3.2,<5.0"
-sentry-sdk = "^2.19.0"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "pandas>=2.3.2,<4.0.0",
+    "dash>=3.2,<5.0",
+    "sentry-sdk>=2.19.0,<3.0.0",
+]
 
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.15.21,<0.17.0"

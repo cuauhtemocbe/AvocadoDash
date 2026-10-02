@@ -122,7 +122,10 @@ relevant image (`docker-build` / `docker-build-dev`) after touching
 `pyproject.toml`. `make docker-stop` stops both the `run` dev container
 and the `docker-run` production container in one call.
 
-Dependency groups use Poetry's native `[tool.poetry.group.dev.dependencies]`
+Project metadata and runtime dependencies live in the standard PEP 621
+`[project]` table (the legacy `[tool.poetry]` metadata fields are deprecated
+and print warnings on every `poetry` command). Dependency groups use Poetry's
+native `[tool.poetry.group.dev.dependencies]`
 table, not the PEP 735 `[dependency-groups]` table — the latter looked
 equivalent but silently broke `poetry install`'s resolver for this
 project's Poetry version (`SolverProblemError: ... doesn't match any
