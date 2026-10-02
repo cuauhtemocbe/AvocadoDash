@@ -29,6 +29,18 @@ FORMAT_CHECK_CMD := ruff format --check .
 TYPECHECK_CMD := mypy --strict src --cache-dir=.mypy_cache/src && \
 	mypy tests --cache-dir=.mypy_cache/tests
 TEST_CMD := pytest
+LOCK_CHECK_CMD := poetry check --lock
+# `validate` runs every gate even when an earlier one fails (each failure just
+# records rc=1) so a single run reports all problems instead of stopping at the
+# first. Each `a && b || rc=1` group is (a && b) || rc=1; `$$rc` is escaped for
+# make and reaches the inner sh as `$rc`.
+VALIDATE_CMD := rc=0; \
+	$(LINT_CMD) || rc=1; \
+	$(FORMAT_CHECK_CMD) || rc=1; \
+	$(LOCK_CHECK_CMD) || rc=1; \
+	$(TYPECHECK_CMD) || rc=1; \
+	$(TEST_CMD) || rc=1; \
+	exit $$rc
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -59,7 +71,7 @@ format-check: ## Verifica el formato sin modificar archivos, dentro de Docker. R
 	$(DEV_RUN) $(FORMAT_CHECK_CMD)
 
 lock-check: ## Verifica que poetry.lock esté sincronizado con pyproject.toml. Requiere `make docker-build-dev` antes
-	$(DEV_RUN) poetry check --lock
+	$(DEV_RUN) $(LOCK_CHECK_CMD)
 
 secret-scan: ## Escanea el diff staged en busca de secretos con gitleaks (usa el índice de git, no todo el repo)
 	docker run --rm -v "$(CURDIR)":/repo -w /repo $(GITLEAKS_IMAGE) protect --staged -v --source /repo
@@ -67,8 +79,8 @@ secret-scan: ## Escanea el diff staged en busca de secretos con gitleaks (usa el
 typecheck: ## Corre mypy --strict sobre src/ (relajado sobre tests/). Requiere `make docker-build-dev` antes
 	$(DEV_RUN) sh -c '$(TYPECHECK_CMD)'
 
-validate: ## Corre todos los quality gates (lint, format-check, typecheck, test) en un solo contenedor. Lo usa el pre-commit hook
-	$(DEV_RUN) sh -c '$(LINT_CMD) && $(FORMAT_CHECK_CMD) && $(TYPECHECK_CMD) && $(TEST_CMD)'
+validate: ## Corre todos los quality gates (lint, format-check, lock-check, typecheck, test) en un solo contenedor, sin parar en el primer fallo. Lo usa el pre-commit hook
+	$(DEV_RUN) sh -c '$(VALIDATE_CMD)'
 
 clean: ## Borra cachés de mypy/pytest/ruff y reportes de cobertura (por si quedaron con dueño root de corridas anteriores)
 	docker run --rm -v "$(CURDIR)":/app $(IMAGE_NAME):dev \

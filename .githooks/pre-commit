@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Scans the staged diff for secrets, then runs the full quality-gate
-# suite (lint, format-check, typecheck, test) before allowing a commit.
+# suite (lint, format-check, lock-check, typecheck, test) before allowing a commit.
 # Enable with: make install-hooks
 # Runs inside Docker via the dev image — build it first with: make docker-build-dev
 set -euo pipefail

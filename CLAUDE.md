@@ -28,7 +28,7 @@ make lint                       # ruff check
 make format                     # ruff format
 make format-check               # ruff format --check
 make typecheck                  # mypy --strict src + mypy tests (separate caches under .mypy_cache/)
-make validate                   # lint + format-check + typecheck + test in ONE container (~12s warm)
+make validate                   # lint + format-check + lock-check + typecheck + test in ONE container; runs all gates even if one fails (~12s warm)
 make clean                      # wipe .mypy_cache/.pytest_cache/.ruff_cache/coverage files
 
 # Docker (production image, no hot-reload — no dev tooling in the image)
@@ -45,8 +45,9 @@ current coverage sits around 96%) and writing `tests/coverage.xml` — that
 path is already bind-mounted (see the Docker section above), so the report
 shows up on the host without a manual `docker compose cp` step. A pre-commit git
 hook (`.githooks/pre-commit`, enabled via `make install-hooks`) runs
-`make secret-scan` + `make validate` (`lint` + `format-check` + `typecheck`
-+ `test`, in that order, in a single container; CI runs the same gate
+`make secret-scan` + `make validate` (`lint` + `format-check` + `lock-check`
++ `typecheck` + `test`, in that order, in a single container; every gate runs
+even when an earlier one fails, so one run reports all failures; CI runs the same gate
 commands as separate jobs rather than through `make validate`, and its
 `typecheck` job restores `.mypy_cache/` with `actions/cache`) — same as
 everything else, this runs against Docker images (`avocadodash:dev` for
