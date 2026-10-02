@@ -2,8 +2,8 @@
 #
 # The entries below are OS-level packages inherited from the python:3.14-slim
 # base image (perl, util-linux/mount/ncurses/gzip/acl utilities) — none of
-# them are installed or invoked by the app at runtime (production doesn't
-# even run apt-get; see Dockerfile). All have status "affected"/"fix_deferred"
+# them are installed or invoked by the app at runtime (production only runs a targeted
+# apt-get --only-upgrade for fixable libs; see Dockerfile). All have status "affected"/"fix_deferred"
 # upstream as of 2026-07-16 — no patched Debian package exists yet, so
 # nothing short of removing the packages (risking breakage of the base
 # image's own tooling) would change this. Re-evaluate when Dependabot bumps
