@@ -21,6 +21,7 @@ from app import (
     DEFAULT_URL_Y_AXIS,
     EMPTY_REGION_MESSAGE,
     REGION_COLOR_PALETTE,
+    DataLoadError,
     app,
     avocado_types,
     create_box_plot,
@@ -186,6 +187,15 @@ def test_load_data_raises_clear_error_for_missing_required_column(
     monkeypatch.setenv("AVOCADO_DATA_PATH", str(csv_path))
 
     with pytest.raises(ValueError, match="region"):
+        load_data()
+
+
+def test_load_data_wraps_unreadable_csv_in_data_load_error(monkeypatch, tmp_path):
+    csv_path = tmp_path / "empty.csv"
+    csv_path.write_text("")
+    monkeypatch.setenv("AVOCADO_DATA_PATH", str(csv_path))
+
+    with pytest.raises(DataLoadError, match="Error loading data"):
         load_data()
 
 
@@ -454,7 +464,8 @@ def test_control_labels_have_tooltip_icons():
 
         icon = find_info_icon(label)
         assert icon is not None, f"{label_id} has no info-icon tooltip"
-        assert isinstance(icon.title, str) and icon.title.strip()
+        assert isinstance(icon.title, str)
+        assert icon.title.strip()
 
 
 def test_metric_dropdown_options_have_tooltip_titles():
@@ -462,15 +473,18 @@ def test_metric_dropdown_options_have_tooltip_titles():
         dropdown = find_component_by_id(app.layout, dropdown_id)
         assert dropdown is not None, f"{dropdown_id} not found in layout"
         for option in dropdown.options:
-            assert "label" in option and "value" in option
-            assert isinstance(option.get("title"), str) and option["title"].strip()
+            assert "label" in option
+            assert "value" in option
+            assert isinstance(option.get("title"), str)
+            assert option["title"].strip()
 
 
 def test_box_plot_groupby_options_have_tooltip_titles():
     dropdown = find_component_by_id(app.layout, "box-plot-groupby")
     assert dropdown is not None
     for option in dropdown.options:
-        assert isinstance(option.get("title"), str) and option["title"].strip()
+        assert isinstance(option.get("title"), str)
+        assert option["title"].strip()
 
 
 def collect_text(component):
