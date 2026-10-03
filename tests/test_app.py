@@ -948,6 +948,53 @@ def test_update_charts_returns_region_specific_message_when_no_regions_selected(
     assert volume_text == EMPTY_REGION_MESSAGE
 
 
+REVERSED_START = "2018-03-25"
+REVERSED_END = "2015-01-04"
+
+
+def _assert_try_adjusting_empty_state(figure):
+    assert figure["data"] == []
+    assert figure["layout"]["annotations"][0]["text"] == t("empty.try_adjusting", "en")
+
+
+def test_update_charts_returns_empty_state_for_reversed_date_range():
+    # Reachable via the shareable URL: _parse_date_param only checks each
+    # date against the data bounds, not that start <= end.
+    price_fig, volume_fig = update_charts(
+        ["Albany"], "organic", REVERSED_START, REVERSED_END
+    )
+
+    _assert_try_adjusting_empty_state(price_fig)
+    _assert_try_adjusting_empty_state(volume_fig)
+
+
+def test_update_scatter_chart_returns_empty_state_for_reversed_date_range():
+    figure = update_scatter_chart(
+        ["Albany"],
+        "organic",
+        REVERSED_START,
+        REVERSED_END,
+        "AveragePrice",
+        "Total Volume",
+    )
+
+    _assert_try_adjusting_empty_state(figure)
+
+
+@pytest.mark.parametrize("group_by", ["type", "region", "year"])
+def test_update_box_plot_returns_empty_state_for_reversed_date_range(group_by):
+    figure = update_box_plot(
+        ["Albany"],
+        "organic",
+        REVERSED_START,
+        REVERSED_END,
+        "AveragePrice",
+        group_by,
+    )
+
+    _assert_try_adjusting_empty_state(figure)
+
+
 def test_update_box_plot_groups_by_type_regardless_of_type_filter():
     figure = update_box_plot(
         ["Albany"], "organic", "2015-01-01", "2015-12-31", "AveragePrice", "type"
