@@ -76,17 +76,3 @@ def test_type_label_matches_existing_title_case_convention_for_english():
     assert type_label("organic", "en") == "Organic"
     assert type_label("conventional", "es") == "Convencional"
     assert type_label("organic", "es") == "Orgánico"
-
-
-def test_accessibility_strings_exist_in_both_languages():
-    for key in (
-        "a11y.start_date",
-        "a11y.end_date",
-        "a11y.download_plot",
-        "a11y.theme_group",
-        "a11y.language_group",
-        "a11y.summary_heading",
-        "a11y.price_chart",
-        "a11y.volume_chart",
-    ):
-        assert t(key, "es") != t(key, "en"), key

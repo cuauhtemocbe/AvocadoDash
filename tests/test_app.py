@@ -6,10 +6,9 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 import sentry_sdk
-from dash import dcc, html, no_update
+from dash import dcc, no_update
 from dash._callback_context import context_value
 from dash._utils import AttributeDict
-from dash.development.base_component import Component
 
 from app import (
     DATA_MAX_DATE,
@@ -21,7 +20,6 @@ from app import (
     DEFAULT_URL_X_AXIS,
     DEFAULT_URL_Y_AXIS,
     EMPTY_REGION_MESSAGE,
-    INITIAL_LANG,
     REGION_COLOR_PALETTE,
     DataLoadError,
     app,
@@ -528,44 +526,6 @@ def test_header_contains_the_cross_section_mark():
 
 def test_header_no_longer_renders_the_emoji():
     assert "🥑" not in collect_text(app.layout)
-
-
-def test_header_mark_image_is_hidden_from_assistive_technology():
-    """Issue #44: the decorative Cross-Section Mark must not be announced
-    by screen readers — empty alt text is the standard way to hide a
-    purely decorative <img> from assistive technology."""
-    mark = find_component_by_id(app.layout, "header-mark")
-    assert mark is not None
-    image = mark.children
-    assert image.alt == ""
-
-
-def iter_all_components(component):
-    """Recursively yield every Dash component in the layout tree."""
-    yield component
-    children = getattr(component, "children", None)
-    if children is None:
-        return
-    if not isinstance(children, list):
-        children = [children]
-    for child in children:
-        if hasattr(child, "to_plotly_json"):
-            yield from iter_all_components(child)
-
-
-def test_no_component_overrides_natural_keyboard_tab_order():
-    """Issue #44: filter controls must be reachable via keyboard in
-    logical order. Dash's default DOM order already matches the visual
-    order the controls are declared in; the risk is a future explicit
-    positive tabIndex silently breaking that. `tabIndex=0` only adds an
-    element to the natural order (the info icons, issue #50), so it is
-    allowed; `tabIndex=-1` and positive values are not."""
-    offending = [
-        component
-        for component in iter_all_components(app.layout)
-        if component.to_plotly_json().get("props", {}).get("tabIndex", 0) != 0
-    ]
-    assert offending == []
 
 
 def test_summary_panel_shows_avg_price_and_total_volume():
@@ -1482,7 +1442,6 @@ def test_update_ui_language_translates_static_text_to_spanish():
         box_plot_column_options,
         box_plot_groupby_label,
         box_plot_groupby_options,
-        *_accessibility_strings,
     ) = update_ui_language("es")
 
     assert header_subtitle[0] == t("header.subtitle_by", "es")
@@ -2056,149 +2015,3 @@ def test_sync_url_and_filters_url_load_restores_chart_selections():
     assert result[6] == "XLarge Bags"
     assert result[7] == "Total Bags"
     assert result[8] == "year"
-
-
-# --- Accessibility findings from the #50 walkthrough ----------------------
-
-
-def iter_components(component):
-    """Depth-first walk over every Dash component in a layout tree."""
-    yield component
-    children = getattr(component, "children", None)
-    if children is None:
-        return
-    if not isinstance(children, (list, tuple)):
-        children = [children]
-    for child in children:
-        if isinstance(child, Component):
-            yield from iter_components(child)
-
-
-def groups_labelled_by(label_id):
-    return [
-        c
-        for c in iter_components(app.layout)
-        if getattr(c, "role", None) == "group"
-        and getattr(c, "aria-labelledby", None) == label_id
-    ]
-
-
-def test_html_lang_starts_as_the_initial_ui_language():
-    assert f'<html lang="{INITIAL_LANG}">' in app.index_string
-
-
-def test_dash_script_container_is_not_a_second_footer_landmark():
-    assert "<footer>" not in app.index_string
-    assert "</footer>" not in app.index_string
-
-
-def test_html_lang_follows_the_language_toggle():
-    assert any("lang-sync" in key for key in app.callback_map)
-    store = find_component_by_id(app.layout, "a11y-strings")
-    assert store.data["es"]["download_plot"] == t("a11y.download_plot", "es")
-    assert store.data["en"]["download_plot"] == t("a11y.download_plot", "en")
-
-
-def test_info_icons_are_focusable_and_expose_the_tooltip_as_their_name():
-    for label_id in CONTROL_LABEL_IDS:
-        icon = find_info_icon(find_component_by_id(app.layout, label_id))
-        assert icon.tabIndex == 0, label_id
-        assert icon.role == "img", label_id
-        assert getattr(icon, "aria-label") == icon.title, label_id
-
-
-@pytest.mark.parametrize("label_id", CONTROL_LABEL_IDS)
-def test_each_control_is_wrapped_in_a_group_named_by_its_label_text(label_id):
-    text_id = f"{label_id}-text"
-    text = find_component_by_id(app.layout, text_id)
-    assert text is not None, f"{text_id} not found in layout"
-    assert text.children.strip()
-    assert len(groups_labelled_by(text_id)) == 1
-
-
-def test_label_text_is_separate_from_the_tooltip_icon():
-    region_label = update_ui_language("es")[5]
-
-    assert region_label[0].id == "region-filter-label-text"
-    assert region_label[0].children == t("filters.region.label", "es")
-    assert region_label[1].className == "info-icon"
-
-
-def test_date_range_placeholders_name_the_inputs_in_each_language():
-    for lang in ("es", "en"):
-        start, end = update_ui_language(lang)[19:21]
-        assert start == t("a11y.start_date", lang)
-        assert end == t("a11y.end_date", lang)
-    date_range = find_component_by_id(app.layout, "date-range")
-    assert date_range.start_date_placeholder_text == t("a11y.start_date", INITIAL_LANG)
-    assert date_range.end_date_placeholder_text == t("a11y.end_date", INITIAL_LANG)
-
-
-def test_toggles_are_named_groups():
-    for toggle_id, label_id in (
-        ("theme-toggle", "theme-toggle-label"),
-        ("language-toggle", "language-toggle-label"),
-    ):
-        (group,) = groups_labelled_by(label_id)
-        assert find_component_by_id(group, toggle_id) is not None
-        assert find_component_by_id(app.layout, label_id).children.strip()
-
-
-def test_toggle_group_labels_are_translated_with_the_ui_language():
-    for lang in ("es", "en"):
-        theme, language = update_ui_language(lang)[21:23]
-        assert theme == t("a11y.theme_group", lang)
-        assert language == t("a11y.language_group", lang)
-
-
-def test_dynamic_text_regions_are_polite_status_regions():
-    for component_id in ("summary-panel", "download-status"):
-        region = find_component_by_id(app.layout, component_id)
-        assert region.role == "status", component_id
-
-
-def test_page_has_header_main_and_footer_landmarks():
-    tags = [type(c) for c in iter_components(app.layout)]
-    assert tags.count(html.Header) == 1
-    assert tags.count(html.Main) == 1
-    assert tags.count(html.Footer) == 1
-    (header,) = [c for c in iter_components(app.layout) if isinstance(c, html.Header)]
-    assert any(isinstance(c, html.H1) for c in iter_components(header))
-    (main,) = [c for c in iter_components(app.layout) if isinstance(c, html.Main)]
-    for graph_id in ("price-chart", "scatter-chart", "box-plot-chart"):
-        assert find_component_by_id(main, graph_id) is not None
-
-
-@pytest.mark.parametrize(
-    "heading_id,translation_key",
-    [
-        ("summary-heading", "a11y.summary_heading"),
-        ("price-chart-heading", "a11y.price_chart"),
-        ("volume-chart-heading", "a11y.volume_chart"),
-    ],
-)
-def test_summary_and_charts_have_screen_reader_only_headings(
-    heading_id, translation_key
-):
-    heading = find_component_by_id(app.layout, heading_id)
-    assert isinstance(heading, html.H2)
-    assert heading.className == "visually-hidden"
-    assert heading.children == t(translation_key, INITIAL_LANG)
-    index = {"summary-heading": 23, "price-chart-heading": 24}.get(heading_id, 25)
-    for lang in ("es", "en"):
-        assert update_ui_language(lang)[index] == t(translation_key, lang)
-
-
-@pytest.mark.parametrize(
-    "graph_id,heading_id",
-    [
-        ("price-chart", "price-chart-heading"),
-        ("volume-chart", "volume-chart-heading"),
-        ("scatter-chart", "scatter-section-title"),
-        ("box-plot-chart", "box-plot-section-title"),
-    ],
-)
-def test_each_chart_sits_in_a_group_named_by_its_heading(graph_id, heading_id):
-    groups = groups_labelled_by(heading_id)
-    assert len(groups) == 1
-    assert find_component_by_id(groups[0], graph_id) is not None

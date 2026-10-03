@@ -1,32 +1,16 @@
-# Implementation Plan: Accessibility & Dark Mode
+# Implementation Plan: Dark Mode
 
 **Spec**: `specs/accessibility-dark-mode.md`
 **Created**: 2026-08-08
+**Updated**: 2026-10-03
 **Status**: draft
 
+> The accessibility components (#44 contrast fixes, keyboard/decorative-image
+> tests, axe-core note) were removed from this plan on 2026-10-03 (issue #89):
+> accessibility is not a goal of the project. Component and task numbers
+> below are the original ones, so gaps are expected.
+
 ## Components
-
-### 1. Contrast fixes (#44)
-- **Purpose**: Fix the 3 failing color pairings found by the audit
-  (`.summary-stat-up`, link `:hover` states, `.download-status` opacity)
-  without touching pairings that already pass.
-- **Files**: `src/assets/style.css`
-- **Effort**: XS
-
-### 2. Keyboard-reachability & decorative-image regression tests (#44)
-- **Purpose**: Lock in the two remaining #44 scenarios that are
-  statically verifiable: no positive/explicit `tabIndex` anywhere in
-  `app.layout`, and the header mark's `alt=""`.
-- **Files**: `tests/test_app.py`
-- **Effort**: XS
-
-### 3. Document the deferred axe-core scenario (#44)
-- **Purpose**: Comment in the spec (done) + a GitHub comment on #44
-  explaining the scenario is blocked on #42, so the issue can be closed
-  as "done except for the documented, tracked gap" rather than left
-  ambiguous.
-- **Files**: none (GitHub issue comment)
-- **Effort**: XS
 
 ### 4. Dark-mode CSS tokens (#45)
 - **Purpose**: Add `[data-theme="dark"]` and
@@ -78,11 +62,7 @@
 ## Dependencies
 
 ### Build Order
-1. Component 1 + 2 (#44 contrast fixes + tests) — foundational, no
-   dependency on dark mode
-2. Component 3 (#44 doc/close-out) — after 1 + 2
-3. Component 4 (dark CSS tokens) — depends on #44's contrast-checking
-   approach (component 1) per the issue's own sequencing note
+3. Component 4 (dark CSS tokens)
 4. Component 5 (store/toggle/clientside) — depends on 4
 5. Component 6 (theme threading through charts) — depends on 5
 6. Component 7 (#51 palette re-validation) — depends on 6 (needs the
@@ -102,25 +82,14 @@ None new — no additional Poetry packages required.
   lines per callback), test the Python-side precedence logic separately
   as pure functions, and manually verify in-browser before opening the
   PR.
-- **`--flesh` reuse across contexts**: `--flesh` already passes contrast
-  everywhere else it's used (on `--ink`), so it stays unchanged globally;
-  only `.summary-stat-up` gets a dedicated darker value. Risk: a future
-  reader might expect `--flesh` itself to have changed. Mitigated with a
-  one-line CSS comment explaining the split.
 
 ### Assumptions
 - The existing `REGION_COLOR_PALETTE` hues may or may not need
   adjustment for the dark background — validated empirically in
   component 7, not assumed upfront either way.
-- "Reachable via keyboard in logical order," absent real browser Tab-key
-  testing, is adequately covered by asserting DOM/source order integrity
-  (no explicit `tabIndex`) — confirmed as sufficient scope for this pass
-  per the earlier scope conversation with the user.
 
 ## Milestones
 
-- [ ] M1: #44 contrast fixes + regression tests green, axe-core scenario
-      documented as deferred
 - [ ] M2: Dark mode toggle functional in `make run` (manual browser
       check) — chrome + all 4 charts re-theme, persists across reload,
       explicit choice overrides OS preference
@@ -128,25 +97,9 @@ None new — no additional Poetry packages required.
       palette committed
 - [ ] M4: `make lint` / `make format-check` / `make test` (≥80% cov) all
       green
-- [ ] M5: PR opened, milestone referenced, issues #44/#45/#51 linked
+- [ ] M5: PR opened, issues #45/#51 linked
 
 ## Tasks
-
-### Foundation
-- [ ] **Task 1**: Fix the 3 failing contrast pairings in `style.css`
-  - **Acceptance**: computed ratios ≥4.5:1 for all 3 (recorded in the
-    spec's audit table); no other pairing's color changes
-  - **Files**: `src/assets/style.css`
-  - **Tests**: hardcoded contrast-ratio regression tests in
-    `tests/test_style.py` or `tests/test_app.py`
-  - **Effort**: XS
-
-- [ ] **Task 2**: Add keyboard-reachability and decorative-image tests
-  - **Acceptance**: test fails if any component gets a positive
-    `tabIndex`; test asserts header mark `alt==""`
-  - **Files**: `tests/test_app.py`
-  - **Tests**: themselves are the tests
-  - **Effort**: XS
 
 ### Features
 - [ ] **Task 3**: Add dark-mode CSS custom-property overrides
@@ -197,8 +150,7 @@ None new — no additional Poetry packages required.
   - **Effort**: XS
 
 - [ ] **Task 8**: Open PR against the milestone
-  - **Acceptance**: PR references #44, #45, #51; milestone set; #50
-    stays open/untouched
+  - **Acceptance**: PR references #45, #51
   - **Files**: n/a
   - **Effort**: XS
 
@@ -209,7 +161,6 @@ tasks, no new infra/dependencies)
 
 | Phase | Effort |
 |-------|--------|
-| Foundation (#44) | XS + XS |
 | Features (#45) | S + M + M |
 | Integration (#51) | S–M |
 | Polish | XS + XS |
