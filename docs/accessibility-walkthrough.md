@@ -6,10 +6,13 @@ automated checks (contrast ratios in `tests/test_style.py`, no positive
 `tabIndex` and `alt=""` on the header mark in `tests/test_app.py`), which
 cannot judge what is actually spoken. Tracking issue: #50.
 
-**Status: procedure written; walkthrough not yet run.** Every "Result"
-cell below is empty until a person runs it with a screen reader. The
+**Status: procedure written; automated accessibility-tree pass done
+(2026-10-03, section 5); spoken walkthrough with a real screen reader
+still pending.** Every "Result" cell below stays empty until a person runs
+it with a screen reader; section 5 records what could be established
+without one. The
 "Code check" column was verified by reading `src/app.py` and
-`src/assets/style.css` at commit `7d3c719` (2026-10-02) and is a
+`src/assets/style.css` at commit `f2c0af6` (2026-10-02) and is a
 hypothesis, not a finding.
 
 ## 1. Setup
@@ -135,18 +138,18 @@ showed on 2026-10-02; "Verdict" is set only after the walkthrough:
 must end up either fixed or filed as its own issue, linked in the last
 column and back on #50.
 
-| # | Suspected finding | Code check (7d3c719) | Verdict | Fixed / issue |
+| # | Suspected finding | Code check (f2c0af6) | Verdict | Fixed / issue |
 |---|-------------------|----------------------|---------|---------------|
-| 1 | No page `lang`; Spanish UI with a bare `<html>` may get the wrong voice | No `lang` or `index_string` customization in `src/app.py` | Pending | |
-| 2 | Controls have no accessible names; labels are `div.menu-title`, not `<label for>` | No `aria-*`, `htmlFor` or `html.Label` anywhere in `src/app.py` | Pending | |
-| 3 | Tooltips are hover-only and unreachable by keyboard / screen reader | `info_icon` is `html.Span("i", title=...)`; not focusable. Dropdown option `title`s likewise | Pending | |
-| 4 | Dynamic updates are silent | `summary-panel`, `download-status` and the charts are not `aria-live` regions; charts sit in `dcc.Loading` | Pending | |
-| 5 | Charts have no text alternative | `dcc.Graph` figures are SVG; the CSV button and the modebar PNG button are the only alternatives | Pending | |
-| 6 | Toggles have no group label; emoji may be read verbosely | `theme-toggle` and `language-toggle` are bare `dcc.RadioItems` | Pending | |
-| 7 | Sparse heading structure | One `H1`, two `H2` (scatter, box plot); no heading for the summary or the price/volume charts | Pending | |
-| 8 | Trend glyphs read oddly or carry meaning only by symbol | `TREND_GLYPHS` prefixes `▲ ` / `▼ ` to summary values | Pending | |
-| 9 | Focus not visible, especially in dark mode | 0 `:focus` / `outline` rules in `style.css` | Pending | |
-| 10 | Page `H1` stays English when the UI is Spanish | Extra, found while writing this: `html.H1(children="Avocado Analytics")` is static and `update_ui_language` has no output for it | Pending | |
+| 1 | No page `lang`; Spanish UI with a bare `<html>` may get the wrong voice | No `lang` or `index_string` customization in `src/app.py` | **Confirmed** (tree pass): `<html lang>` absent in ES and EN, and it does not change with the toggle | Fixed: `<html lang>` starts as `es`; the `lang-sync` callback follows the toggle |
+| 2 | Controls have no accessible names; labels are `div.menu-title`, not `<label for>` | No `aria-*`, `htmlFor` or `html.Label` anywhere in `src/app.py` | **Confirmed** (tree pass): see 5.2 | Fixed: each control is a `role="group"` named by its label; date inputs named via localized placeholders |
+| 3 | Tooltips are hover-only and unreachable by keyboard / screen reader | `info_icon` is `html.Span("i", title=...)`; not focusable. Dropdown option `title`s likewise | **Confirmed** (tree pass): the `i` icons are not in the Tab order | Fixed: icons are focusable, named by the tooltip and show it on focus. Dropdown option `title`s are still not exposed (dcc limitation; same text as the filter tooltip) |
+| 4 | Dynamic updates are silent | `summary-panel`, `download-status` and the charts are not `aria-live` regions; charts sit in `dcc.Loading` | **Confirmed** (tree pass): 0 live regions on the page | Fixed: `summary-panel` and `download-status` are `role="status"`. Charts deliberately not live (too noisy) |
+| 5 | Charts have no text alternative | `dcc.Graph` figures are SVG; the CSV button and the modebar PNG button are the only alternatives | **Confirmed** (tree pass): charts expose unnamed `img`; modebar PNG button is reachable and named | Partly fixed: each chart sits in a group named by a heading; modebar button name localized. No per-chart data description; the CSV export remains the alternative |
+| 6 | Toggles have no group label; emoji may be read verbosely | `theme-toggle` and `language-toggle` are bare `dcc.RadioItems` | **Confirmed** (tree pass): unnamed `listbox` groups; how `☀`/`🌙` are spoken still pending | Partly fixed: both toggles are named groups. `☀` / `🌙` labels unchanged; needs a human pass |
+| 7 | Sparse heading structure | One `H1`, two `H2` (scatter, box plot); no heading for the summary or the price/volume charts | **Confirmed** (tree pass): see 5.1 | Fixed: `header` / `main` / `footer` landmarks; hidden H2s for summary and both charts; Dash's empty `<footer>` turned into a `<div>` |
+| 8 | Trend glyphs read oddly or carry meaning only by symbol | `TREND_GLYPHS` prefixes `▲ ` / `▼ ` to summary values | Pending: glyph is not `aria-hidden`; needs speech to judge | |
+| 9 | Focus not visible, especially in dark mode | 0 `:focus` / `outline` rules in `style.css` | **Confirmed** (tree pass): see 5.4 | Fixed: 2px `--focus-ring` outline (3:1 checked in both themes), including modebar and date inputs |
+| 10 | Page `H1` stays English when the UI is Spanish | Extra, found while writing this: `html.H1(children="Avocado Analytics")` is static and `update_ui_language` has no output for it | **Not an issue** (tree pass): it is the product name; same text in ES and EN | |
 
 ## 4. After the walkthrough
 
@@ -156,3 +159,97 @@ column and back on #50.
 3. Comment on #50 with the table of verdicts and links.
 4. Re-run this walkthrough when the filter or chart layout changes
    substantially, and update the "Code check" column.
+
+## 5. Run log: accessibility-tree pass (2026-10-03)
+
+**What this is and is not.** Run by Claude Code, not a person with a
+screen reader. Tool: Playwright driving Chromium against the production
+image (`avocadodash:latest`, `python src/app.py`, port 8050), reading the
+browser's accessibility tree and sending real Tab key presses. This shows
+the roles, names and focus order a screen reader is *given*; it does not
+show what is *spoken*. Speech-dependent cells (emoji, glyphs, announcement
+of changes, virtual-cursor reading order) are still pending a human pass.
+Orca is installed on the dev machine but needs a desktop session and audio.
+
+| Pass | Tool | Browser | Language | Theme |
+|------|------|---------|----------|-------|
+| T1 | Playwright accessibility tree + Tab | Chromium (Playwright build) | ES (and EN for 5.5) | light |
+| T2 | same | same | ES | dark |
+
+### 5.1 Structure (2.1)
+- Title: `Avocado Analytics` once loaded (`Updating...` while Dash loads).
+- `<html lang>`: absent, in ES and after switching to EN.
+- Headings: `H1 Avocado Analytics`, `H2 Análisis de Dispersión`,
+  `H2 Análisis de Caja y Bigotes`. Summary panel and the price and volume
+  charts have none; chart titles are SVG text, not headings.
+- Landmarks: only the footer (`contentinfo`). No `main`, `banner` or `nav`.
+- Header mark: not in the tree (`alt=""` works).
+
+### 5.2 Names and roles (2.2 to 2.4)
+- Region / type / axis / group-by dropdowns are `button`s named by their
+  **current value** (`Albany`, `Orgánico`, `Precio Promedio`), not by the
+  visible label (`Región`, `Tipo`, ...). The label is a plain `div`.
+- Date fields are `textbox`es named `Start Date` / `End Date` in English,
+  also in ES.
+- Open dropdown popup is a `listbox` with no accessible name.
+- Tooltip `i` icons are `generic` with the tooltip as name; they are not
+  focusable, so the explanatory text is unreachable by keyboard.
+- Dropdown option `title`s were not exposed as descriptions.
+
+### 5.3 Toggles and summary (2.5, 2.6)
+- Theme and language toggles are `listbox` > `option` > `radio` with no
+  group name. Radio names are `☀`, `🌙`, `ES`, `EN`.
+- Summary cards are plain `generic` pairs (label, value). The trend card
+  reads `▲ +1.6%` (glyph not `aria-hidden`; the `+` already carries the
+  direction). Empty selection replaces the panel with the message
+  `Select at least one region to see data.`
+- No `aria-live`, `role=status` or `role=alert` anywhere: panel, charts and
+  `download-status` update silently.
+
+### 5.4 Focus (2.7)
+Tab order is: theme, language, header links, region, type, start date,
+end date, CSV button, modebar PNG buttons (interleaved with the chart
+sections), axis and box-plot dropdowns, footer links. The `i` icons and
+the charts themselves are never focused.
+
+| Control | Light | Dark |
+|---------|-------|------|
+| Dropdowns | 1px purple outline | same, on a white field: visible |
+| Links, CSV button | browser default ring | visible |
+| Date fields | `outline: none`; only the selected text signals focus | same |
+| Modebar PNG buttons | 1px **black** outline on a light chart | black on a dark chart: **not visible** (confirmed in a screenshot) |
+
+### 5.5 Downloads and language (2.6, 2.8)
+- CSV button: native `button`; with no region it is `disabled` and
+  `download-status` shows `Select at least one region to see data.` as a
+  plain `div` (not announced, not tied to the button).
+- Switching to EN changes labels, options and `H2`s, but not `<html lang>`,
+  the date field names, or the modebar label (`Download plot as a PNG` in
+  both languages).
+
+### 5.6 Still needs a person with a screen reader
+2.1 steps 1, 2, 5; 2.2 steps 2 to 4; 2.3 steps 2 to 6; 2.5 steps 2, 3;
+2.6 steps 1 to 4; 2.8 steps 2, 3, 5; and the speech side of findings 6 and 8.
+
+## 6. Fixes applied (2026-10-03)
+
+Verified with the same tree + Tab pass as section 5 (ES and EN, light and
+dark) and `make validate` green (268 tests, 98.5 % coverage). Still **not**
+verified by ear: re-run sections 2.1 to 2.8 with a screen reader and
+update the "Result" cells.
+
+- `src/app.py`: `lang` on `<html>` plus the `lang-sync` clientside
+  callback; `aria()` helper; `control_group` / `toggle_group`; focusable,
+  named `info_icon`; `header` / `main` / `footer`; `role="status"` on the
+  summary and download status; hidden headings; chart groups; localized
+  date placeholders and modebar button name.
+- `src/assets/style.css`: `--focus-ring` / `--focus-ring-on-ink` tokens and
+  `:focus-visible` rules (with `!important` overrides for dcc and Plotly),
+  `.visually-hidden`, tooltip on icon focus.
+- `src/translations.py`: `a11y.*` keys (ES and EN).
+- Tests: `tests/test_app.py` (structure and names), `tests/test_style.py`
+  (focus ring contrast in both themes, override rules),
+  `tests/test_translations.py`. The #44 tab-order guard now forbids only
+  non-zero `tabIndex`.
+- Not covered by automated tests: the `lang-sync` JavaScript (the project
+  has no browser test tooling, see #42); checked by hand with Playwright.

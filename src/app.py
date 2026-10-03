@@ -248,14 +248,63 @@ def cross_section_mark() -> html.Div:
     )
 
 
+def aria(**attrs: str) -> dict[str, Any]:
+    """`aria-*` props for a Dash component: `aria(label="x")` -> `{"aria-label":
+    "x"}`. Hyphenated names can't be written as Python keywords, and a typed
+    `**dict[str, str]` is rejected by Dash's per-prop stubs; `Any` values
+    sidestep that."""
+    return {f"aria-{name}": value for name, value in attrs.items()}
+
+
 def info_icon(tooltip_text: str) -> html.Span:
-    """Small circular "i" badge that shows `tooltip_text` as a tooltip on hover."""
-    return html.Span("i", className="info-icon", title=tooltip_text)
+    """Small circular "i" badge. `title` gives mouse users the hover tooltip;
+    `tabIndex`/`role`/`aria-label` give keyboard and screen-reader users the
+    same text (a bare `title` is neither focusable nor reliably announced)."""
+    return html.Span(
+        "i",
+        className="info-icon",
+        title=tooltip_text,
+        tabIndex=0,
+        role="img",
+        **aria(label=tooltip_text),
+    )
 
 
-def label_with_tooltip(text: str, tooltip_text: str) -> TooltipChildren:
-    """Menu-title `children` list: the label text plus its info-icon tooltip."""
-    return [text, info_icon(tooltip_text)]
+def label_with_tooltip(text: str, tooltip_text: str, text_id: str) -> TooltipChildren:
+    """Menu-title `children` list: the label text (in a span with `text_id`,
+    so `control_group` can name its group by the text alone, without the
+    tooltip) plus its info-icon tooltip."""
+    return [html.Span(text, id=text_id), info_icon(tooltip_text)]
+
+
+def control_group(label_id: str, children: list[Any], **props: Any) -> html.Div:
+    """A label + control pair as a `role="group"` named by the label text.
+    dcc dropdowns already point their own `aria-labelledby` at their current
+    value, so a `<label for>` would never become the control's name; the
+    group name is announced when focus enters the group instead."""
+    return html.Div(
+        children=children,
+        role="group",
+        **aria(labelledby=f"{label_id}-text"),
+        **props,
+    )
+
+
+def toggle_group(label_id: str, label_key: str, toggle: dcc.RadioItems) -> html.Div:
+    """A toggle wrapped in a `role="group"` named by a screen-reader-only
+    label (translated by `update_ui_language`)."""
+    return html.Div(
+        children=[
+            html.Span(
+                translations.t(label_key, INITIAL_LANG),
+                id=label_id,
+                className="visually-hidden",
+            ),
+            toggle,
+        ],
+        role="group",
+        **aria(labelledby=label_id),
+    )
 
 
 def build_type_options(lang: str) -> DropdownOptions:
@@ -331,10 +380,30 @@ init_sentry()
 # Default language on load — the target audience is primarily Spanish-speaking.
 INITIAL_LANG = "es"
 
+# Dash's default index template renders a bare <html>, so screen readers
+# pick their voice from the OS locale rather than the UI. The language
+# toggle keeps this attribute in sync at runtime (see the `lang-sync`
+# clientside callback near the bottom of this file).
+app.index_string = app.index_string.replace("<html>", f'<html lang="{INITIAL_LANG}">')
+# The same template wraps Dash's own scripts in a <footer>, which would be a
+# second, empty `contentinfo` landmark next to the page's real footer.
+app.index_string = app.index_string.replace("<footer>", "<div>").replace(
+    "</footer>", "</div>"
+)
+
 LANGUAGE_TOGGLE_OPTIONS: list[Option] = [
     {"label": "ES", "value": "es"},
     {"label": "EN", "value": "en"},
 ]
+
+# Strings the `lang-sync` clientside callback needs for DOM nodes Dash does
+# not render itself (Plotly's modebar buttons, which hardcode English).
+A11Y_STRINGS = {
+    option["value"]: {
+        "download_plot": translations.t("a11y.download_plot", option["value"])
+    }
+    for option in LANGUAGE_TOGGLE_OPTIONS
+}
 
 # Dark mode (issue #45). "light"/"dark" resolved client-side: an explicit
 # choice (persisted in theme-store's localStorage) always wins; the OS's
@@ -476,21 +545,31 @@ app.layout = html.Div(
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="theme-store", storage_type="local"),
         dcc.Store(id="theme-resolved"),
-        html.Div(
+        dcc.Store(id="a11y-strings", data=A11Y_STRINGS),
+        dcc.Store(id="lang-sync"),
+        html.Header(
             children=[
-                dcc.RadioItems(
-                    id="theme-toggle",
-                    options=THEME_TOGGLE_OPTIONS,
-                    value=None,
-                    inline=True,
-                    className="theme-toggle",
+                toggle_group(
+                    "theme-toggle-label",
+                    "a11y.theme_group",
+                    dcc.RadioItems(
+                        id="theme-toggle",
+                        options=THEME_TOGGLE_OPTIONS,
+                        value=None,
+                        inline=True,
+                        className="theme-toggle",
+                    ),
                 ),
-                dcc.RadioItems(
-                    id="language-toggle",
-                    options=LANGUAGE_TOGGLE_OPTIONS,
-                    value=INITIAL_LANG,
-                    inline=True,
-                    className="language-toggle",
+                toggle_group(
+                    "language-toggle-label",
+                    "a11y.language_group",
+                    dcc.RadioItems(
+                        id="language-toggle",
+                        options=LANGUAGE_TOGGLE_OPTIONS,
+                        value=INITIAL_LANG,
+                        inline=True,
+                        className="language-toggle",
+                    ),
                 ),
                 cross_section_mark(),
                 html.H1(children="Avocado Analytics", className="header-title"),
@@ -522,290 +601,370 @@ app.layout = html.Div(
             ],
             className="header",
         ),
-        html.Div(
+        html.Main(
             children=[
                 html.Div(
                     children=[
-                        html.Div(
-                            id="region-filter-label",
-                            children=label_with_tooltip(
-                                translations.t("filters.region.label", INITIAL_LANG),
-                                translations.t("filters.region.tooltip", INITIAL_LANG),
-                            ),
-                            className="menu-title",
+                        control_group(
+                            "region-filter-label",
+                            children=[
+                                html.Div(
+                                    id="region-filter-label",
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.region.label", INITIAL_LANG
+                                        ),
+                                        translations.t(
+                                            "filters.region.tooltip", INITIAL_LANG
+                                        ),
+                                        "region-filter-label-text",
+                                    ),
+                                    className="menu-title",
+                                ),
+                                dcc.Dropdown(
+                                    id="region-filter",
+                                    options=REGION_FILTER_OPTIONS,
+                                    value=["Albany"],
+                                    multi=True,
+                                    clearable=True,
+                                    searchable=True,
+                                    placeholder=translations.t(
+                                        "filters.region.placeholder", INITIAL_LANG
+                                    ),
+                                    className="dropdown",
+                                ),
+                            ],
                         ),
-                        dcc.Dropdown(
-                            id="region-filter",
-                            options=REGION_FILTER_OPTIONS,
-                            value=["Albany"],
-                            multi=True,
-                            clearable=True,
-                            searchable=True,
-                            placeholder=translations.t(
-                                "filters.region.placeholder", INITIAL_LANG
+                        control_group(
+                            "type-filter-label",
+                            children=[
+                                html.Div(
+                                    id="type-filter-label",
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.type.label", INITIAL_LANG
+                                        ),
+                                        translations.t(
+                                            "filters.type.tooltip", INITIAL_LANG
+                                        ),
+                                        "type-filter-label-text",
+                                    ),
+                                    className="menu-title",
+                                ),
+                                dcc.Dropdown(
+                                    id="type-filter",
+                                    options=build_type_options(INITIAL_LANG),
+                                    value="organic",
+                                    clearable=False,
+                                    searchable=False,
+                                    className="dropdown",
+                                ),
+                            ],
+                        ),
+                        control_group(
+                            "date-range-label",
+                            children=[
+                                html.Div(
+                                    id="date-range-label",
+                                    children=label_with_tooltip(
+                                        translations.t(
+                                            "filters.date_range.label", INITIAL_LANG
+                                        ),
+                                        translations.t(
+                                            "filters.date_range.tooltip", INITIAL_LANG
+                                        ),
+                                        "date-range-label-text",
+                                    ),
+                                    className="menu-title",
+                                ),
+                                dcc.DatePickerRange(
+                                    id="date-range",
+                                    min_date_allowed=data["Date"].min().date(),
+                                    max_date_allowed=data["Date"].max().date(),
+                                    start_date=data["Date"].min().date(),
+                                    end_date=data["Date"].max().date(),
+                                    start_date_placeholder_text=translations.t(
+                                        "a11y.start_date", INITIAL_LANG
+                                    ),
+                                    end_date_placeholder_text=translations.t(
+                                        "a11y.end_date", INITIAL_LANG
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ],
+                    className="menu",
+                ),
+                html.Div(
+                    children=[
+                        html.Button(
+                            translations.t("download.button", INITIAL_LANG),
+                            id="download-csv-button",
+                            className="download-button",
+                        ),
+                        html.Span(
+                            id="download-status",
+                            className="download-status",
+                            role="status",
+                        ),
+                        dcc.Download(id="download-dataframe-csv"),
+                    ],
+                    className="export-section",
+                ),
+                html.H2(
+                    id="summary-heading",
+                    children=translations.t("a11y.summary_heading", INITIAL_LANG),
+                    className="visually-hidden",
+                ),
+                html.Div(
+                    id="summary-panel",
+                    role="status",
+                    className="summary-panel",
+                ),
+                dcc.Loading(
+                    id="charts-loading",
+                    type="circle",
+                    children=html.Div(
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.H2(
+                                        id="price-chart-heading",
+                                        children=translations.t(
+                                            "a11y.price_chart", INITIAL_LANG
+                                        ),
+                                        className="visually-hidden",
+                                    ),
+                                    dcc.Graph(
+                                        id="price-chart",
+                                        config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
+                                    ),
+                                ],
+                                className="card",
+                                role="group",
+                                **aria(labelledby="price-chart-heading"),
                             ),
-                            className="dropdown",
+                            html.Div(
+                                children=[
+                                    html.H2(
+                                        id="volume-chart-heading",
+                                        children=translations.t(
+                                            "a11y.volume_chart", INITIAL_LANG
+                                        ),
+                                        className="visually-hidden",
+                                    ),
+                                    dcc.Graph(
+                                        id="volume-chart",
+                                        config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
+                                    ),
+                                ],
+                                className="card",
+                                role="group",
+                                **aria(labelledby="volume-chart-heading"),
+                            ),
+                        ],
+                        className="wrapper",
+                    ),
+                ),
+                html.Div(
+                    children=[
+                        html.H2(
+                            id="scatter-section-title",
+                            children=translations.t(
+                                "sections.scatter_title", INITIAL_LANG
+                            ),
+                            style={
+                                "text-align": "center",
+                                "margin": "40px 0 20px 0",
+                                "color": "var(--heading-accent)",
+                                "font-family": "Fraunces, serif",
+                                "font-size": "28px",
+                            },
+                        ),
+                        html.Div(
+                            children=[
+                                control_group(
+                                    "x-axis-label",
+                                    children=[
+                                        html.Div(
+                                            id="x-axis-label",
+                                            children=label_with_tooltip(
+                                                translations.t(
+                                                    "filters.x_axis.label", INITIAL_LANG
+                                                ),
+                                                translations.t(
+                                                    "filters.x_axis.tooltip",
+                                                    INITIAL_LANG,
+                                                ),
+                                                "x-axis-label-text",
+                                            ),
+                                            className="menu-title",
+                                        ),
+                                        dcc.Dropdown(
+                                            id="x-axis-dropdown",
+                                            options=build_numeric_column_options(
+                                                INITIAL_LANG
+                                            ),
+                                            value="AveragePrice",
+                                            clearable=False,
+                                            className="dropdown",
+                                        ),
+                                    ],
+                                    style={"width": "45%", "display": "inline-block"},
+                                ),
+                                control_group(
+                                    "y-axis-label",
+                                    children=[
+                                        html.Div(
+                                            id="y-axis-label",
+                                            children=label_with_tooltip(
+                                                translations.t(
+                                                    "filters.y_axis.label", INITIAL_LANG
+                                                ),
+                                                translations.t(
+                                                    "filters.y_axis.tooltip",
+                                                    INITIAL_LANG,
+                                                ),
+                                                "y-axis-label-text",
+                                            ),
+                                            className="menu-title",
+                                        ),
+                                        dcc.Dropdown(
+                                            id="y-axis-dropdown",
+                                            options=build_numeric_column_options(
+                                                INITIAL_LANG
+                                            ),
+                                            value=COL_TOTAL_VOLUME,
+                                            clearable=False,
+                                            className="dropdown",
+                                        ),
+                                    ],
+                                    style={
+                                        "width": "45%",
+                                        "display": "inline-block",
+                                        "margin-left": "10%",
+                                    },
+                                ),
+                            ],
+                            style={"margin": "20px auto", "max-width": "800px"},
+                        ),
+                        dcc.Loading(
+                            id="scatter-loading",
+                            type="circle",
+                            children=html.Div(
+                                children=dcc.Graph(
+                                    id="scatter-chart",
+                                    config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
+                                ),
+                                className="card",
+                                role="group",
+                                **aria(labelledby="scatter-section-title"),
+                                style={"margin": "20px auto", "max-width": "1000px"},
+                            ),
                         ),
                     ]
                 ),
                 html.Div(
                     children=[
-                        html.Div(
-                            id="type-filter-label",
-                            children=label_with_tooltip(
-                                translations.t("filters.type.label", INITIAL_LANG),
-                                translations.t("filters.type.tooltip", INITIAL_LANG),
+                        html.H2(
+                            id="box-plot-section-title",
+                            children=translations.t(
+                                "sections.box_plot_title", INITIAL_LANG
                             ),
-                            className="menu-title",
+                            style={
+                                "text-align": "center",
+                                "margin": "40px 0 20px 0",
+                                "color": "var(--heading-accent)",
+                                "font-family": "Fraunces, serif",
+                                "font-size": "28px",
+                            },
                         ),
-                        dcc.Dropdown(
-                            id="type-filter",
-                            options=build_type_options(INITIAL_LANG),
-                            value="organic",
-                            clearable=False,
-                            searchable=False,
-                            className="dropdown",
-                        ),
-                    ],
-                ),
-                html.Div(
-                    children=[
                         html.Div(
-                            id="date-range-label",
-                            children=label_with_tooltip(
-                                translations.t(
-                                    "filters.date_range.label", INITIAL_LANG
+                            children=[
+                                control_group(
+                                    "box-plot-column-label",
+                                    children=[
+                                        html.Div(
+                                            id="box-plot-column-label",
+                                            children=label_with_tooltip(
+                                                translations.t(
+                                                    "filters.box_plot_column.label",
+                                                    INITIAL_LANG,
+                                                ),
+                                                translations.t(
+                                                    "filters.box_plot_column.tooltip",
+                                                    INITIAL_LANG,
+                                                ),
+                                                "box-plot-column-label-text",
+                                            ),
+                                            className="menu-title",
+                                        ),
+                                        dcc.Dropdown(
+                                            id="box-plot-column",
+                                            options=build_numeric_column_options(
+                                                INITIAL_LANG
+                                            ),
+                                            value="AveragePrice",
+                                            clearable=False,
+                                            className="dropdown",
+                                        ),
+                                    ],
+                                    style={"width": "45%", "display": "inline-block"},
                                 ),
-                                translations.t(
-                                    "filters.date_range.tooltip", INITIAL_LANG
+                                control_group(
+                                    "box-plot-groupby-label",
+                                    children=[
+                                        html.Div(
+                                            id="box-plot-groupby-label",
+                                            children=label_with_tooltip(
+                                                translations.t(
+                                                    "filters.box_plot_groupby.label",
+                                                    INITIAL_LANG,
+                                                ),
+                                                translations.t(
+                                                    "filters.box_plot_groupby.tooltip",
+                                                    INITIAL_LANG,
+                                                ),
+                                                "box-plot-groupby-label-text",
+                                            ),
+                                            className="menu-title",
+                                        ),
+                                        dcc.Dropdown(
+                                            id="box-plot-groupby",
+                                            options=build_groupby_options(INITIAL_LANG),
+                                            value="type",
+                                            clearable=False,
+                                            className="dropdown",
+                                        ),
+                                    ],
+                                    style={
+                                        "width": "45%",
+                                        "display": "inline-block",
+                                        "margin-left": "10%",
+                                    },
                                 ),
-                            ),
-                            className="menu-title",
+                            ],
+                            style={"margin": "20px auto", "max-width": "800px"},
                         ),
-                        dcc.DatePickerRange(
-                            id="date-range",
-                            min_date_allowed=data["Date"].min().date(),
-                            max_date_allowed=data["Date"].max().date(),
-                            start_date=data["Date"].min().date(),
-                            end_date=data["Date"].max().date(),
+                        dcc.Loading(
+                            id="box-plot-loading",
+                            type="circle",
+                            children=html.Div(
+                                children=dcc.Graph(
+                                    id="box-plot-chart",
+                                    config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
+                                ),
+                                className="card",
+                                role="group",
+                                **aria(labelledby="box-plot-section-title"),
+                                style={"margin": "20px auto", "max-width": "1000px"},
+                            ),
                         ),
                     ]
                 ),
             ],
-            className="menu",
         ),
-        html.Div(
-            children=[
-                html.Button(
-                    translations.t("download.button", INITIAL_LANG),
-                    id="download-csv-button",
-                    className="download-button",
-                ),
-                html.Span(id="download-status", className="download-status"),
-                dcc.Download(id="download-dataframe-csv"),
-            ],
-            className="export-section",
-        ),
-        html.Div(
-            id="summary-panel",
-            className="summary-panel",
-        ),
-        dcc.Loading(
-            id="charts-loading",
-            type="circle",
-            children=html.Div(
-                children=[
-                    html.Div(
-                        children=dcc.Graph(
-                            id="price-chart",
-                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
-                        ),
-                        className="card",
-                    ),
-                    html.Div(
-                        children=dcc.Graph(
-                            id="volume-chart",
-                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
-                        ),
-                        className="card",
-                    ),
-                ],
-                className="wrapper",
-            ),
-        ),
-        html.Div(
-            children=[
-                html.H2(
-                    id="scatter-section-title",
-                    children=translations.t("sections.scatter_title", INITIAL_LANG),
-                    style={
-                        "text-align": "center",
-                        "margin": "40px 0 20px 0",
-                        "color": "var(--heading-accent)",
-                        "font-family": "Fraunces, serif",
-                        "font-size": "28px",
-                    },
-                ),
-                html.Div(
-                    children=[
-                        html.Div(
-                            children=[
-                                html.Div(
-                                    id="x-axis-label",
-                                    children=label_with_tooltip(
-                                        translations.t(
-                                            "filters.x_axis.label", INITIAL_LANG
-                                        ),
-                                        translations.t(
-                                            "filters.x_axis.tooltip", INITIAL_LANG
-                                        ),
-                                    ),
-                                    className="menu-title",
-                                ),
-                                dcc.Dropdown(
-                                    id="x-axis-dropdown",
-                                    options=build_numeric_column_options(INITIAL_LANG),
-                                    value="AveragePrice",
-                                    clearable=False,
-                                    className="dropdown",
-                                ),
-                            ],
-                            style={"width": "45%", "display": "inline-block"},
-                        ),
-                        html.Div(
-                            children=[
-                                html.Div(
-                                    id="y-axis-label",
-                                    children=label_with_tooltip(
-                                        translations.t(
-                                            "filters.y_axis.label", INITIAL_LANG
-                                        ),
-                                        translations.t(
-                                            "filters.y_axis.tooltip", INITIAL_LANG
-                                        ),
-                                    ),
-                                    className="menu-title",
-                                ),
-                                dcc.Dropdown(
-                                    id="y-axis-dropdown",
-                                    options=build_numeric_column_options(INITIAL_LANG),
-                                    value=COL_TOTAL_VOLUME,
-                                    clearable=False,
-                                    className="dropdown",
-                                ),
-                            ],
-                            style={
-                                "width": "45%",
-                                "display": "inline-block",
-                                "margin-left": "10%",
-                            },
-                        ),
-                    ],
-                    style={"margin": "20px auto", "max-width": "800px"},
-                ),
-                dcc.Loading(
-                    id="scatter-loading",
-                    type="circle",
-                    children=html.Div(
-                        children=dcc.Graph(
-                            id="scatter-chart",
-                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
-                        ),
-                        className="card",
-                        style={"margin": "20px auto", "max-width": "1000px"},
-                    ),
-                ),
-            ]
-        ),
-        html.Div(
-            children=[
-                html.H2(
-                    id="box-plot-section-title",
-                    children=translations.t("sections.box_plot_title", INITIAL_LANG),
-                    style={
-                        "text-align": "center",
-                        "margin": "40px 0 20px 0",
-                        "color": "var(--heading-accent)",
-                        "font-family": "Fraunces, serif",
-                        "font-size": "28px",
-                    },
-                ),
-                html.Div(
-                    children=[
-                        html.Div(
-                            children=[
-                                html.Div(
-                                    id="box-plot-column-label",
-                                    children=label_with_tooltip(
-                                        translations.t(
-                                            "filters.box_plot_column.label",
-                                            INITIAL_LANG,
-                                        ),
-                                        translations.t(
-                                            "filters.box_plot_column.tooltip",
-                                            INITIAL_LANG,
-                                        ),
-                                    ),
-                                    className="menu-title",
-                                ),
-                                dcc.Dropdown(
-                                    id="box-plot-column",
-                                    options=build_numeric_column_options(INITIAL_LANG),
-                                    value="AveragePrice",
-                                    clearable=False,
-                                    className="dropdown",
-                                ),
-                            ],
-                            style={"width": "45%", "display": "inline-block"},
-                        ),
-                        html.Div(
-                            children=[
-                                html.Div(
-                                    id="box-plot-groupby-label",
-                                    children=label_with_tooltip(
-                                        translations.t(
-                                            "filters.box_plot_groupby.label",
-                                            INITIAL_LANG,
-                                        ),
-                                        translations.t(
-                                            "filters.box_plot_groupby.tooltip",
-                                            INITIAL_LANG,
-                                        ),
-                                    ),
-                                    className="menu-title",
-                                ),
-                                dcc.Dropdown(
-                                    id="box-plot-groupby",
-                                    options=build_groupby_options(INITIAL_LANG),
-                                    value="type",
-                                    clearable=False,
-                                    className="dropdown",
-                                ),
-                            ],
-                            style={
-                                "width": "45%",
-                                "display": "inline-block",
-                                "margin-left": "10%",
-                            },
-                        ),
-                    ],
-                    style={"margin": "20px auto", "max-width": "800px"},
-                ),
-                dcc.Loading(
-                    id="box-plot-loading",
-                    type="circle",
-                    children=html.Div(
-                        children=dcc.Graph(
-                            id="box-plot-chart",
-                            config=DOWNLOAD_ONLY_MODEBAR_CONFIG,
-                        ),
-                        className="card",
-                        style={"margin": "20px auto", "max-width": "1000px"},
-                    ),
-                ),
-            ]
-        ),
-        html.Div(
+        html.Footer(
             children=[
                 html.P(
                     id="footer-text",
@@ -1302,6 +1461,13 @@ def create_scatter_chart(
     Output("box-plot-column", "options"),
     Output("box-plot-groupby-label", "children"),
     Output("box-plot-groupby", "options"),
+    Output("date-range", "start_date_placeholder_text"),
+    Output("date-range", "end_date_placeholder_text"),
+    Output("theme-toggle-label", "children"),
+    Output("language-toggle-label", "children"),
+    Output("summary-heading", "children"),
+    Output("price-chart-heading", "children"),
+    Output("volume-chart-heading", "children"),
     Input("language-toggle", "value"),
 )
 def update_ui_language(
@@ -1326,6 +1492,13 @@ def update_ui_language(
     DropdownOptions,
     TooltipChildren,
     DropdownOptions,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
 ]:
     """Retranslate every static, filter-independent piece of text/labels in
     the layout. Only `children`/`placeholder`/`options["label"|"title"]` are
@@ -1371,38 +1544,52 @@ def update_ui_language(
         label_with_tooltip(
             translations.t("filters.region.label", lang),
             translations.t("filters.region.tooltip", lang),
+            "region-filter-label-text",
         ),
         translations.t("filters.region.placeholder", lang),
         label_with_tooltip(
             translations.t("filters.type.label", lang),
             translations.t("filters.type.tooltip", lang),
+            "type-filter-label-text",
         ),
         build_type_options(lang),
         label_with_tooltip(
             translations.t("filters.date_range.label", lang),
             translations.t("filters.date_range.tooltip", lang),
+            "date-range-label-text",
         ),
         translations.t("download.button", lang),
         label_with_tooltip(
             translations.t("filters.x_axis.label", lang),
             translations.t("filters.x_axis.tooltip", lang),
+            "x-axis-label-text",
         ),
         build_numeric_column_options(lang),
         label_with_tooltip(
             translations.t("filters.y_axis.label", lang),
             translations.t("filters.y_axis.tooltip", lang),
+            "y-axis-label-text",
         ),
         build_numeric_column_options(lang),
         label_with_tooltip(
             translations.t("filters.box_plot_column.label", lang),
             translations.t("filters.box_plot_column.tooltip", lang),
+            "box-plot-column-label-text",
         ),
         build_numeric_column_options(lang),
         label_with_tooltip(
             translations.t("filters.box_plot_groupby.label", lang),
             translations.t("filters.box_plot_groupby.tooltip", lang),
+            "box-plot-groupby-label-text",
         ),
         build_groupby_options(lang),
+        translations.t("a11y.start_date", lang),
+        translations.t("a11y.end_date", lang),
+        translations.t("a11y.theme_group", lang),
+        translations.t("a11y.language_group", lang),
+        translations.t("a11y.summary_heading", lang),
+        translations.t("a11y.price_chart", lang),
+        translations.t("a11y.volume_chart", lang),
     )
 
 
@@ -1532,6 +1719,39 @@ app.clientside_callback(  # type: ignore[no-untyped-call]
     Output("theme-resolved", "data"),
     Input("theme-toggle", "value"),
     Input("theme-store", "data"),
+)
+
+
+# Keeps <html lang> and Plotly's modebar button names in step with the
+# language toggle. The modebar is rebuilt by Plotly on every figure update
+# (resetting its English `aria-label`), hence the MutationObserver.
+app.clientside_callback(  # type: ignore[no-untyped-call]
+    """
+    function(lang, strings) {
+        document.documentElement.setAttribute("lang", lang);
+        var label = strings[lang].download_plot;
+        window.avocadoModebarLabel = label;
+        function relabel() {
+            document.querySelectorAll(".modebar-btn").forEach(function(btn) {
+                if (btn.getAttribute("aria-label") !== window.avocadoModebarLabel) {
+                    btn.setAttribute("aria-label", window.avocadoModebarLabel);
+                    btn.setAttribute("data-title", window.avocadoModebarLabel);
+                }
+            });
+        }
+        if (!window.avocadoModebarObserver) {
+            window.avocadoModebarObserver = new MutationObserver(relabel);
+            window.avocadoModebarObserver.observe(
+                document.body, {childList: true, subtree: true}
+            );
+        }
+        relabel();
+        return lang;
+    }
+    """,
+    Output("lang-sync", "data"),
+    Input("language-toggle", "value"),
+    State("a11y-strings", "data"),
 )
 
 
