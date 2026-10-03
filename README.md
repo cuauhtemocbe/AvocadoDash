@@ -171,6 +171,33 @@ make help
   `trivy` no está instalado). Se activa junto con el hook de pre-commit vía
   `make install-hooks`; vive en `.githooks/pre-push`.
 
+- **SonarQube (solo local)**: el análisis de calidad se corre a mano contra un
+  SonarQube local en `http://localhost:9000`; no hay target de `Makefile` ni
+  job de CI. La configuración está en `sonar-project.properties`
+  (`sonar.projectKey=avocado-dash`). Flujo:
+
+  ```bash
+  make test   # genera tests/coverage.xml (está en .gitignore)
+  SONAR_TOKEN="$(cat ~/.config/sonar/token)" docker run --rm --network host \
+    -e SONAR_TOKEN -v "$(pwd)":/usr/src -w /usr/src \
+    sonarsource/sonar-scanner-cli:latest \
+    sonar-scanner -Dsonar.host.url=http://localhost:9000
+  ```
+
+  El token es un único User Token (`squ_`, sin expiración) guardado en
+  `~/.config/sonar/token` (permisos 600), compartido por todos los repos: un
+  User Token pertenece al usuario, no a un proyecto, así que no hace falta uno
+  por repo ni un `SONAR_TOKEN` en cada `.env`.
+
+  Hay que correr `make test` antes de cada análisis; sin `coverage.xml` Sonar
+  reporta la cobertura sin dato. El warning `Invalid directory path in
+  'source' element: /app` es inofensivo: las rutas del XML son relativas a la
+  raíz del repo y Sonar las resuelve bien. Si el scanner responde `401`, el
+  token está revocado o no existe en esa instancia; genera uno nuevo en
+  *My Account → Security* (tipo **User Token**, sin expiración) y guárdalo en
+  `~/.config/sonar/token`. Ver el skill `/sonar-check` para el flujo completo
+  con el MCP.
+
 ---
 
 ## 🐳 Docker
