@@ -59,6 +59,14 @@ will not catch a secret sitting in an untracked or unstaged file; that's an
 intentional scope limit, not a gap, since staging is the last checkpoint
 before the secret would actually leave the machine on commit.
 
+SonarQube is local-only: `sonar-project.properties` (key `avocado-dash`)
+points at `tests/coverage.xml`, so run `make test` before each scan or
+coverage shows as missing. There is deliberately no `make sonar` target and
+no CI job — the scanner command and troubleshooting are in `README.md`
+("Tests y Lint") and the `/sonar-check` skill. Baseline (2026-10-02): Quality
+Gate OK, coverage 97.9 %, 0 bugs/vulnerabilities/hotspots, 29 code smells.
+The `source` warning about `/app` in the scanner log is harmless.
+
 `main` has branch protection requiring the `lint`, `test`, `lock-check`,
 `license-check`, and `trivy-fs` CI checks (see `.github/workflows/ci.yml`)
 to pass before a PR can merge — `build` is deliberately excluded from that
