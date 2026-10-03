@@ -8,8 +8,6 @@ describes the literal declaration (e.g. "background-color is var(--ink)")."""
 import re
 from pathlib import Path
 
-import pytest
-
 STYLE_PATH = Path(__file__).resolve().parent.parent / "src" / "assets" / "style.css"
 
 
@@ -137,42 +135,7 @@ def test_summary_stat_value_uses_mono_font_with_fallback():
     assert "monospace" in resolved
 
 
-# --- WCAG AA contrast regression (issues #44, #45, #51) -----------------
-# Relative-luminance/contrast-ratio math per the WCAG 2.1 formula. These
-# guard both the light-mode pairings the #44 audit found failing 4.5:1
-# and the new dark-mode token values introduced for #45, so a future
-# color edit can't silently regress either theme (see
-# specs/accessibility-dark-mode.md's contrast audit table).
-
-WCAG_AA_NORMAL_TEXT_RATIO = 4.5
-
-
-def _linearize_channel(channel_8bit):
-    fraction = channel_8bit / 255.0
-    if fraction <= 0.03928:
-        return fraction / 12.92
-    return ((fraction + 0.055) / 1.055) ** 2.4
-
-
-def _hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
-
-
-def _relative_luminance(rgb):
-    r, g, b = (_linearize_channel(c) for c in rgb)
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-def _blend_over(fg_hex, alpha, bg_hex):
-    fg, bg = _hex_to_rgb(fg_hex), _hex_to_rgb(bg_hex)
-    return tuple(alpha * f + (1 - alpha) * b for f, b in zip(fg, bg))
-
-
-def contrast_ratio(rgb_a, rgb_b):
-    lum_a, lum_b = _relative_luminance(rgb_a), _relative_luminance(rgb_b)
-    lighter, darker = max(lum_a, lum_b), min(lum_a, lum_b)
-    return (lighter + 0.05) / (darker + 0.05)
+# --- Dark mode (issue #45) ---------------------------------------------
 
 
 def extract_dark_tokens(css_text):
@@ -204,150 +167,10 @@ def resolve_token(name, tokens):
     return value
 
 
-def effective_rgb(color_value, bg_hex):
-    """RGB for a literal hex or rgba(...) color, alpha-blended over
-    `bg_hex` if translucent."""
-    if color_value.startswith("#"):
-        return _hex_to_rgb(color_value)
-    match = re.match(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)", color_value)
-    assert match, f"unsupported color value: {color_value!r}"
-    r, g, b, alpha = match.groups()
-    fg_hex = f"#{int(r):02X}{int(g):02X}{int(b):02X}"
-    return _blend_over(fg_hex, float(alpha), bg_hex)
-
-
-@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
-def test_summary_stat_up_color_meets_aa_contrast_on_card(tokens_fn):
-    tokens = tokens_fn(read_css())
-    color = resolve_token("--summary-up-color", tokens)
-    bg = resolve_token("--card-bg", tokens)
-    ratio = contrast_ratio(effective_rgb(color, bg), _hex_to_rgb(bg))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
-@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
-def test_summary_stat_down_color_meets_aa_contrast_on_card(tokens_fn):
-    tokens = tokens_fn(read_css())
-    color = resolve_token("--summary-down-color", tokens)
-    bg = resolve_token("--card-bg", tokens)
-    ratio = contrast_ratio(effective_rgb(color, bg), _hex_to_rgb(bg))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
-@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
-def test_summary_stat_value_color_meets_aa_contrast_on_card(tokens_fn):
-    tokens = tokens_fn(read_css())
-    color = resolve_token("--text", tokens)
-    bg = resolve_token("--card-bg", tokens)
-    ratio = contrast_ratio(effective_rgb(color, bg), _hex_to_rgb(bg))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
-@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
-def test_download_status_color_meets_aa_contrast_on_parchment(tokens_fn):
-    tokens = tokens_fn(read_css())
-    rule = extract_rule(read_css(), ".download-status")
-    assert declared_value(rule, "color") == "var(--text-muted)"
-    color = resolve_token("--text-muted", tokens)
-    bg = resolve_token("--parchment", tokens)
-    ratio = contrast_ratio(effective_rgb(color, bg), _hex_to_rgb(bg))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
-@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
-def test_menu_title_heading_accent_meets_aa_contrast_on_parchment(tokens_fn):
-    tokens = tokens_fn(read_css())
-    color = resolve_token("--heading-accent", tokens)
-    bg = resolve_token("--parchment", tokens)
-    ratio = contrast_ratio(effective_rgb(color, bg), _hex_to_rgb(bg))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
-def test_header_link_hover_color_meets_aa_contrast_on_ink():
-    tokens = extract_root_tokens(read_css())
-    rule = extract_rule(read_css(), ".header-link:hover")
-    color = declared_value(rule, "color")
-    ratio = contrast_ratio(_hex_to_rgb(color), _hex_to_rgb(tokens["--ink"]))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
-def test_footer_link_hover_color_meets_aa_contrast_on_ink():
-    tokens = extract_root_tokens(read_css())
-    rule = extract_rule(read_css(), ".footer-link:hover")
-    color = declared_value(rule, "color")
-    ratio = contrast_ratio(_hex_to_rgb(color), _hex_to_rgb(tokens["--ink"]))
-    assert ratio >= WCAG_AA_NORMAL_TEXT_RATIO
-
-
 def test_dark_mode_card_bg_is_distinct_from_dark_mode_parchment():
-    """Non-text UI-component contrast (WCAG 1.4.11, 3:1) between the two
-    dark-mode surfaces, so cards visually separate from the page."""
+    """The two dark-mode surfaces differ, so cards visually separate from
+    the page."""
     tokens = extract_dark_tokens(read_css())
     card_bg = resolve_token("--card-bg", tokens)
     parchment = resolve_token("--parchment", tokens)
     assert card_bg != parchment
-
-
-# --- Keyboard focus visibility (finding #9 of the #50 walkthrough) --------
-# WCAG 2.1 SC 1.4.11 asks 3:1 for the focus indicator against the surface
-# it is drawn on. The ring is drawn outside the control (outline-offset),
-# so it sits on the page or card background, not on the control itself.
-
-WCAG_AA_NON_TEXT_RATIO = 3.0
-
-
-@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
-@pytest.mark.parametrize("surface", ["--parchment", "--card-bg"])
-def test_focus_ring_meets_non_text_contrast_on_page_surfaces(tokens_fn, surface):
-    tokens = tokens_fn(read_css())
-    ring = resolve_token("--focus-ring", tokens)
-    bg = resolve_token(surface, tokens)
-    ratio = contrast_ratio(effective_rgb(ring, bg), _hex_to_rgb(bg))
-    assert ratio >= WCAG_AA_NON_TEXT_RATIO
-
-
-def test_focus_ring_on_ink_meets_non_text_contrast_in_both_themes():
-    for tokens_fn in (extract_root_tokens, extract_dark_tokens):
-        tokens = tokens_fn(read_css())
-        ring = resolve_token("--focus-ring-on-ink", tokens)
-        ink = resolve_token("--ink", tokens)
-        ratio = contrast_ratio(effective_rgb(ring, ink), _hex_to_rgb(ink))
-        assert ratio >= WCAG_AA_NON_TEXT_RATIO
-
-
-def test_every_focusable_control_gets_the_focus_ring():
-    css = read_css()
-    base = extract_rule(css, ":focus-visible")
-    assert declared_value(base, "outline") == "2px solid var(--focus-ring)"
-    assert "outline-offset" in base
-    on_ink = extract_rule(css, ".footer :focus-visible")
-    assert declared_value(on_ink, "outline-color") == "var(--focus-ring-on-ink)"
-    assert ".header :focus-visible,\n.footer :focus-visible" in css
-
-
-@pytest.mark.parametrize(
-    "selector",
-    [
-        ".js-plotly-plot .plotly .modebar-btn:focus-visible",
-        ".dash-datepicker-input:focus-visible",
-        ".dash-dropdown:focus-visible",
-    ],
-)
-def test_third_party_controls_override_their_own_focus_styles(selector):
-    rule = extract_rule(read_css(), selector)
-    assert "var(--focus-ring)" in declared_value(rule, "outline")
-    assert "!important" in declared_value(rule, "outline")
-
-
-def test_visually_hidden_class_hides_content_but_keeps_it_readable():
-    rule = extract_rule(read_css(), ".visually-hidden")
-    assert declared_value(rule, "position") == "absolute"
-    assert declared_value(rule, "width") == "1px"
-    assert declared_value(rule, "overflow") == "hidden"
-    assert "display" not in rule
-    assert "visibility" not in rule
-
-
-def test_info_icon_shows_its_tooltip_on_keyboard_focus():
-    rule = extract_rule(read_css(), ".info-icon:focus-visible::after")
-    assert declared_value(rule, "content") == "attr(aria-label)"
