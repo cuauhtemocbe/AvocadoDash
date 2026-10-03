@@ -286,3 +286,67 @@ def test_dark_mode_card_bg_is_distinct_from_dark_mode_parchment():
     card_bg = resolve_token("--card-bg", tokens)
     parchment = resolve_token("--parchment", tokens)
     assert card_bg != parchment
+
+
+# --- Keyboard focus visibility (finding #9 of the #50 walkthrough) --------
+# WCAG 2.1 SC 1.4.11 asks 3:1 for the focus indicator against the surface
+# it is drawn on. The ring is drawn outside the control (outline-offset),
+# so it sits on the page or card background, not on the control itself.
+
+WCAG_AA_NON_TEXT_RATIO = 3.0
+
+
+@pytest.mark.parametrize("tokens_fn", [extract_root_tokens, extract_dark_tokens])
+@pytest.mark.parametrize("surface", ["--parchment", "--card-bg"])
+def test_focus_ring_meets_non_text_contrast_on_page_surfaces(tokens_fn, surface):
+    tokens = tokens_fn(read_css())
+    ring = resolve_token("--focus-ring", tokens)
+    bg = resolve_token(surface, tokens)
+    ratio = contrast_ratio(effective_rgb(ring, bg), _hex_to_rgb(bg))
+    assert ratio >= WCAG_AA_NON_TEXT_RATIO
+
+
+def test_focus_ring_on_ink_meets_non_text_contrast_in_both_themes():
+    for tokens_fn in (extract_root_tokens, extract_dark_tokens):
+        tokens = tokens_fn(read_css())
+        ring = resolve_token("--focus-ring-on-ink", tokens)
+        ink = resolve_token("--ink", tokens)
+        ratio = contrast_ratio(effective_rgb(ring, ink), _hex_to_rgb(ink))
+        assert ratio >= WCAG_AA_NON_TEXT_RATIO
+
+
+def test_every_focusable_control_gets_the_focus_ring():
+    css = read_css()
+    base = extract_rule(css, ":focus-visible")
+    assert declared_value(base, "outline") == "2px solid var(--focus-ring)"
+    assert "outline-offset" in base
+    on_ink = extract_rule(css, ".footer :focus-visible")
+    assert declared_value(on_ink, "outline-color") == "var(--focus-ring-on-ink)"
+    assert ".header :focus-visible,\n.footer :focus-visible" in css
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        ".js-plotly-plot .plotly .modebar-btn:focus-visible",
+        ".dash-datepicker-input:focus-visible",
+        ".dash-dropdown:focus-visible",
+    ],
+)
+def test_third_party_controls_override_their_own_focus_styles(selector):
+    rule = extract_rule(read_css(), selector)
+    assert "var(--focus-ring)" in declared_value(rule, "outline")
+    assert "!important" in declared_value(rule, "outline")
+
+
+def test_visually_hidden_class_hides_content_but_keeps_it_readable():
+    rule = extract_rule(read_css(), ".visually-hidden")
+    assert declared_value(rule, "position") == "absolute"
+    assert declared_value(rule, "width") == "1px"
+    assert declared_value(rule, "overflow") == "hidden"
+    assert "display" not in rule and "visibility" not in rule
+
+
+def test_info_icon_shows_its_tooltip_on_keyboard_focus():
+    rule = extract_rule(read_css(), ".info-icon:focus-visible::after")
+    assert declared_value(rule, "content") == "attr(aria-label)"
