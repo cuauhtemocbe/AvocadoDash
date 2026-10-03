@@ -45,7 +45,12 @@ class Option(TypedDict):
 DropdownOptions = list[Option]
 
 
-REQUIRED_DATA_COLUMNS = {"Date", "AveragePrice", "Total Volume", "type", "region"}
+COL_TOTAL_VOLUME = "Total Volume"
+REQUIRED_DATA_COLUMNS = {"Date", "AveragePrice", COL_TOTAL_VOLUME, "type", "region"}
+
+
+class DataLoadError(Exception):
+    """Raised when the avocado CSV exists but cannot be read or parsed."""
 
 
 def load_data() -> pd.DataFrame:
@@ -61,7 +66,7 @@ def load_data() -> pd.DataFrame:
     except FileNotFoundError:
         raise FileNotFoundError(f"Could not find avocado.csv at {csv_path}")
     except Exception as e:
-        raise Exception(f"Error loading data: {str(e)}")
+        raise DataLoadError(f"Error loading data: {str(e)}") from e
 
     missing_columns = REQUIRED_DATA_COLUMNS - set(raw_data.columns)
     if missing_columns:
@@ -210,7 +215,7 @@ DOWNLOAD_ONLY_MODEBAR_CONFIG: dcc.Graph.Config = {
 # Define numeric columns for scatter plot
 numeric_columns = [
     "AveragePrice",
-    "Total Volume",
+    COL_TOTAL_VOLUME,
     "Total Bags",
     "Small Bags",
     "Large Bags",
@@ -307,7 +312,7 @@ def init_sentry() -> None:
     exceptions (see each `except` block below), so they never reach Flask
     as unhandled — Sentry's automatic Flask capture would see nothing.
     Each callback calls sentry_sdk.capture_exception(e) explicitly
-    alongside its existing logger.error(...) call. With no SENTRY_DSN set,
+    alongside its existing logger.exception(...) call. With no SENTRY_DSN set,
     the SDK's capture calls no-op. A malformed SENTRY_DSN makes
     sentry_sdk.init() itself raise (BadDsn) rather than no-op, so it's
     guarded here — a bad env var should degrade to "no error reporting",
@@ -350,7 +355,7 @@ REGION_FILTER_OPTIONS: DropdownOptions = [
 DEFAULT_URL_REGIONS = ["Albany"]
 DEFAULT_URL_TYPE = "organic"
 DEFAULT_URL_X_AXIS = "AveragePrice"
-DEFAULT_URL_Y_AXIS = "Total Volume"
+DEFAULT_URL_Y_AXIS = COL_TOTAL_VOLUME
 DEFAULT_URL_BOX_PLOT_COLUMN = "AveragePrice"
 DEFAULT_URL_BOX_PLOT_GROUPBY = "type"
 DATA_MIN_DATE = data["Date"].min().date()
@@ -684,7 +689,7 @@ app.layout = html.Div(
                                 dcc.Dropdown(
                                     id="y-axis-dropdown",
                                     options=build_numeric_column_options(INITIAL_LANG),
-                                    value="Total Volume",
+                                    value=COL_TOTAL_VOLUME,
                                     clearable=False,
                                     className="dropdown",
                                 ),
@@ -876,7 +881,7 @@ def create_summary_panel(
             f"${stats['avg_price']:.2f}",
         ),
         summary_stat_card(
-            translations.column_label("Total Volume", lang),
+            translations.column_label(COL_TOTAL_VOLUME, lang),
             format_number(stats["total_volume"]),
         ),
     ]
@@ -1046,7 +1051,7 @@ def create_volume_chart(
     """Create the volume chart, one line per region in `filtered_data`."""
     volume_label = translations.t("common.volume", lang)
     traces = _region_traces(
-        filtered_data, "Total Volume", volume_label, "%{y:,.0f}", lang
+        filtered_data, COL_TOTAL_VOLUME, volume_label, "%{y:,.0f}", lang
     )
     chart_bg, gridcolor, text_color = _chart_chrome(theme)
     return {
@@ -1084,6 +1089,63 @@ def create_volume_chart(
     }
 
 
+def _type_box_traces(
+    filtered_data: pd.DataFrame, column: str, lang: str, by_region: bool
+) -> list[dict[str, Any]]:
+    """One box per avocado type, colored by type. With `by_region` the boxes
+    are spread along a region x-axis instead of sitting side by side."""
+    traces: list[dict[str, Any]] = []
+    for avocado_type in sorted(filtered_data["type"].unique()):
+        type_data = filtered_data[filtered_data["type"] == avocado_type]
+        trace: dict[str, Any] = {
+            "y": type_data[column],
+            "type": "box",
+            "name": translations.type_label(avocado_type, lang),
+            "marker": {"color": TYPE_COLOR_MAP.get(avocado_type, "#17B897")},
+            "boxpoints": "outliers",
+        }
+        if by_region:
+            trace["x"] = type_data["region"]
+        else:
+            trace.update({"jitter": 0.3, "pointpos": -1.8})
+        traces.append(trace)
+    return traces
+
+
+def _field_box_traces(
+    filtered_data: pd.DataFrame, column: str, field: str
+) -> list[dict[str, Any]]:
+    """One box per distinct value of `field`, named after that value."""
+    traces: list[dict[str, Any]] = []
+    for value in sorted(filtered_data[field].unique()):
+        group_data = filtered_data[filtered_data[field] == value]
+        traces.append(
+            {
+                "y": group_data[column],
+                "type": "box",
+                "name": str(value),
+                "boxpoints": "outliers",
+                "jitter": 0.3,
+                "pointpos": -1.8,
+            }
+        )
+    return traces
+
+
+def _box_traces(
+    filtered_data: pd.DataFrame, column: str, group_by: str, lang: str
+) -> list[dict[str, Any]]:
+    if group_by == "type":
+        return _type_box_traces(filtered_data, column, lang, by_region=False)
+    if group_by == "year":
+        return _field_box_traces(filtered_data, column, "year")
+    # group_by == "region": color by type when several types are present,
+    # else one box per region
+    if len(filtered_data["type"].unique()) > 1:
+        return _type_box_traces(filtered_data, column, lang, by_region=True)
+    return _field_box_traces(filtered_data, column, "region")
+
+
 def create_box_plot(
     filtered_data: pd.DataFrame,
     column: str,
@@ -1092,71 +1154,7 @@ def create_box_plot(
     theme: str = "light",
 ) -> dict[str, Any]:
     """Create a box plot for the selected column grouped by the specified variable."""
-    # Color mapping for different groups
-    color_map = TYPE_COLOR_MAP
-
-    traces: list[dict[str, Any]] = []
-
-    if group_by == "type":
-        # Group by avocado type
-        for avocado_type in sorted(filtered_data["type"].unique()):
-            type_data = filtered_data[filtered_data["type"] == avocado_type]
-            traces.append(
-                {
-                    "y": type_data[column],
-                    "type": "box",
-                    "name": translations.type_label(avocado_type, lang),
-                    "marker": {"color": color_map.get(avocado_type, "#17B897")},
-                    "boxpoints": "outliers",
-                    "jitter": 0.3,
-                    "pointpos": -1.8,
-                }
-            )
-
-    elif group_by == "region":
-        # For regions, use a single box plot with color by type if multiple types exist
-        if len(filtered_data["type"].unique()) > 1:
-            for avocado_type in sorted(filtered_data["type"].unique()):
-                type_data = filtered_data[filtered_data["type"] == avocado_type]
-                traces.append(
-                    {
-                        "y": type_data[column],
-                        "x": type_data["region"],
-                        "type": "box",
-                        "name": translations.type_label(avocado_type, lang),
-                        "marker": {"color": color_map.get(avocado_type, "#17B897")},
-                        "boxpoints": "outliers",
-                    }
-                )
-        else:
-            # Single type, group by region
-            for region in sorted(filtered_data["region"].unique()):
-                region_data = filtered_data[filtered_data["region"] == region]
-                traces.append(
-                    {
-                        "y": region_data[column],
-                        "type": "box",
-                        "name": region,
-                        "boxpoints": "outliers",
-                        "jitter": 0.3,
-                        "pointpos": -1.8,
-                    }
-                )
-
-    elif group_by == "year":
-        # Group by year
-        for year in sorted(filtered_data["year"].unique()):
-            year_data = filtered_data[filtered_data["year"] == year]
-            traces.append(
-                {
-                    "y": year_data[column],
-                    "type": "box",
-                    "name": str(year),
-                    "boxpoints": "outliers",
-                    "jitter": 0.3,
-                    "pointpos": -1.8,
-                }
-            )
+    traces = _box_traces(filtered_data, column, group_by, lang)
 
     # Determine layout based on group_by
     if group_by == "region" and len(filtered_data["type"].unique()) > 1:
@@ -1563,7 +1561,7 @@ def update_summary_panel(
             filtered_data, regions, avocado_type, start_date, end_date, lang
         )
     except Exception as e:
-        logger.error(f"Error in summary panel callback: {str(e)}", exc_info=True)
+        logger.exception(f"Error in summary panel callback: {str(e)}")
         report_callback_error(
             e,
             regions=regions,
@@ -1600,7 +1598,7 @@ def update_download_controls(
             return True, translations.t("download.no_data", lang)
         return False, ""
     except Exception as e:
-        logger.error(f"Error in download controls callback: {str(e)}", exc_info=True)
+        logger.exception(f"Error in download controls callback: {str(e)}")
         report_callback_error(
             e,
             regions=regions,
@@ -1643,7 +1641,7 @@ def download_filtered_csv(
             filtered_data.to_csv, "avocado_filtered.csv", index=False
         )
     except Exception as e:
-        logger.error(f"Error in download callback: {str(e)}", exc_info=True)
+        logger.exception(f"Error in download callback: {str(e)}")
         report_callback_error(
             e,
             regions=regions,
@@ -1697,7 +1695,7 @@ def update_charts(
         )
 
     except Exception as e:
-        logger.error(f"Error in callback: {str(e)}", exc_info=True)
+        logger.exception(f"Error in callback: {str(e)}")
         report_callback_error(
             e,
             regions=regions,
@@ -1752,7 +1750,7 @@ def update_scatter_chart(
         return create_scatter_chart(filtered_data, x_col, y_col, lang, theme)
 
     except Exception as e:
-        logger.error(f"Error in scatter chart callback: {str(e)}", exc_info=True)
+        logger.exception(f"Error in scatter chart callback: {str(e)}")
         report_callback_error(
             e,
             regions=regions,
@@ -1821,7 +1819,7 @@ def update_box_plot(
         return create_box_plot(filtered_data, column, group_by, lang, theme)
 
     except Exception as e:
-        logger.error(f"Error in box plot callback: {str(e)}", exc_info=True)
+        logger.exception(f"Error in box plot callback: {str(e)}")
         report_callback_error(
             e,
             regions=regions,

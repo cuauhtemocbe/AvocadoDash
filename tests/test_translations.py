@@ -34,7 +34,8 @@ def test_es_and_en_have_identical_key_sets(name, mapping):
 def test_no_empty_translation_values(name, mapping):
     for lang, entries in mapping.items():
         for key, value in entries.items():
-            assert isinstance(value, str) and value.strip(), (name, lang, key)
+            assert isinstance(value, str), (name, lang, key)
+            assert value.strip(), (name, lang, key)
 
 
 def test_t_looks_up_correct_language():
