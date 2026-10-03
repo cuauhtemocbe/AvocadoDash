@@ -344,7 +344,8 @@ def test_visually_hidden_class_hides_content_but_keeps_it_readable():
     assert declared_value(rule, "position") == "absolute"
     assert declared_value(rule, "width") == "1px"
     assert declared_value(rule, "overflow") == "hidden"
-    assert "display" not in rule and "visibility" not in rule
+    assert "display" not in rule
+    assert "visibility" not in rule
 
 
 def test_info_icon_shows_its_tooltip_on_keyboard_focus():
