@@ -69,11 +69,13 @@ RUN python -m pip uninstall -y pip
 
 # The pinned base image can lag Debian security updates by days. Upgrade only
 # the packages Trivy flags with a fix already published (currently libpcre2,
-# CVE-2026-103111) instead of carrying the CVE until the next digest bump,
-# then drop apt's lists so no extra layer weight or tooling state remains.
-# Remove this once the digest above ships libpcre2-8-0 >= 10.46-1~deb13u3.
+# CVE-2026-103111, and zlib1g, CVE-2026-76844 and CVE-2026-85091) instead of
+# carrying the CVE until the next digest bump, then drop apt's lists so no extra
+# layer weight or tooling state remains.
+# Remove libpcre2-8-0 once the digest above ships >= 10.46-1~deb13u3, and zlib1g
+# once it ships >= 1:1.3.dfsg+really1.3.1-1+deb13u1 (meta-projects#92).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 && \
+    apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 zlib1g && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
