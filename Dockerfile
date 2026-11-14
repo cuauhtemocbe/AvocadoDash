@@ -1,4 +1,7 @@
-FROM python:3.14-slim AS base
+# Every Python base image in this file uses the same exact-patch tag plus
+# index digest, so the next CPython release is one search-and-replace of that
+# string (Dependabot's docker entry opens the PR).
+FROM python:3.14.10-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS base
 
 # Set working directory
 WORKDIR /app
@@ -46,18 +49,13 @@ EXPOSE 8050
 CMD ["poetry", "run", "python", "src/app.py"]
 
 # --- Production image (default build target): runtime artifacts only, no poetry/git.
-# Base image pinned by digest here (NOT via the shared `base` stage above) for
-# byte-for-byte reproducible builds. dev/builder intentionally stay on the
-# floating `python:3.14-slim` tag — receiving automatic security patches on
-# rebuild matters more there than exact reproducibility. This asymmetry is
-# deliberate; update the digest (Dependabot bumps it automatically) rather
-# than reverting to a floating tag here.
-#
-# Use a tag that's actively rebuilt (`python:3.14-slim`, currently 3.14.7),
-# not a frozen historical patch tag like `python:3.14.0-slim` — the latter
-# stops receiving OS security patches once superseded, so pinning its digest
-# just freezes in known CVEs instead of freezing in a known-good state. ---
-FROM python:3.14-slim@sha256:0741d101873c12ab927e6f8653feb8862b9bd58771177acb1b885b95141f91b4 AS production
+# Starts from the same pinned string as the `base` stage above (not via that
+# stage) so the final image carries nothing but the venv and `src/`. All stages
+# share one exact patch release + digest for byte-for-byte reproducible builds.
+# An exact patch tag stops receiving OS security patches once superseded, so
+# keep it moving: bump the string (Dependabot bumps it automatically) rather
+# than reverting to a floating tag. ---
+FROM python:3.14.10-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS production
 
 WORKDIR /app
 
