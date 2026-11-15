@@ -1,7 +1,7 @@
 # Every Python base image in this file uses the same exact-patch tag plus
 # index digest, so the next CPython release is one search-and-replace of that
 # string (Dependabot's docker entry opens the PR).
-FROM python:3.14.10-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS base
+FROM python:3.15.0-slim-trixie@sha256:f5b92f2a669a4c347044f29367f31983280b648250ca94dea66f98c53bc87e58 AS base
 
 # Set working directory
 WORKDIR /app
@@ -55,7 +55,7 @@ CMD ["poetry", "run", "python", "src/app.py"]
 # An exact patch tag stops receiving OS security patches once superseded, so
 # keep it moving: bump the string (Dependabot bumps it automatically) rather
 # than reverting to a floating tag. ---
-FROM python:3.14.10-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS production
+FROM python:3.15.0-slim-trixie@sha256:f5b92f2a669a4c347044f29367f31983280b648250ca94dea66f98c53bc87e58 AS production
 
 WORKDIR /app
 
